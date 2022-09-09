@@ -1,0 +1,37 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  image-ok:
+    uses: ./.github/workflows/workflow.yaml
+    with:
+      runs-on: ubuntu-latest
+      name: test
+      context: ./test/image-ok
+      push: false
+    secrets:
+      registry-url: example.com
+      registry-username: foo
+      registry-password: bar
+      token: ${{ secrets.GITHUB_TOKEN }}
+
+  image-vulnerable:
+    uses: ./.github/workflows/workflow.yaml
+    with:
+      runs-on: ubuntu-latest
+      name: test
+      context: ./test/image-vulnerable
+      push: false
+      trivy-error-is-success: true
+    secrets:
+      registry-url: example.com
+      registry-username: foo
+      registry-password: bar
+      token: ${{ secrets.GITHUB_TOKEN }}
