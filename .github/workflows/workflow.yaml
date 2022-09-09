@@ -1,0 +1,253 @@
+on:
+  workflow_call:
+    inputs:
+      context:
+        type: string
+        default: "."
+        description: The root directory for the Docker build context.
+      dockerfile:
+        type: string
+        default: Dockerfile
+        description: Path to a Dockerfile relative to the Docker build context path.
+      push:
+        type: boolean
+        default: true
+        description: Push a successfully built image to a registry.
+      name:
+        type: string
+        description: Image name (repository path) within a registry.
+        required: true
+      tag-latest:
+        type: boolean
+        default: false
+        description: Tag a successfully built image with the tag latest.
+      runs-on:
+        type: string
+        default: self-hosted
+        description: Type of runner for the jobs. For non-self-hosted runners, use ubuntu-latest for example.
+      # TODO: Haven't figured out how to only run the 'push' action if the trivy
+      # scan is successful, while still allowing trivy-enabled to be false.
+      #trivy-enabled:
+      #  type: boolean
+      #  default: true
+      #  description: Scan the built image for known vulnerabilities using Trivy.
+      trivy-error-is-success:
+        type: boolean
+        default: false
+        description: Do not produce an error if the Trivy scan fails. Primarily used for testing.
+      trivy-ignore-unfixed:
+        type: boolean
+        default: true
+        description: Ignore errors that do not have a known fix.
+      trivy-ignore-files:
+        type: string
+        default: ""
+        description: Comma-separated list of paths to Trivy ignore files, relative to the repository root.
+      trivy-severity:
+        type: string
+        default: MEDIUM,HIGH,CRITICAL
+        description: Comma-separated list of severities to consider an error.
+    secrets:
+      registry-url:
+        description: URL to the container registry.
+        required: true
+      registry-username:
+        description: Username for the container registry.
+        required: true
+      registry-password:
+        description: Password for the container registry.
+        required: true
+      token:
+        description: GitHub auth token.
+        required: true
+    outputs:
+      image-digest:
+        description: The image digest for this build.
+        value: ${{ jobs.build.outputs.image-digest }}
+      image-ref-stripped:
+        description: An image reference for this build, stripped of its registry URL ("<name>:<sha>@<digest>").
+        value: ${{ jobs.push.outputs.image-ref-stripped }}
+      image-tags-stripped:
+        description: Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (i.e. "<name1>:<tag1>,<name2>:<tag2>").
+        value: ${{ jobs.push.outputs.image-tags-stripped }}
+      unique-id:
+        description: A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
+        value: ${{ jobs.build.outputs.unique-id }}
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      -
+        # A unique ID used to name artifacts produced.
+        # At least on self-hosted runners, we seem to share the workspace directory
+        # leading to race conditions if multiple instances of this workflow are
+        # running in parallel within the same run.
+        name: Generate unique ID
+        id: gen-unique-id
+        run: |
+          echo "::set-output name=unique-id::$(date +%Y-%m-%d)-${{ github.sha }}-$(openssl rand -hex 20)"
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.token }}
+      -
+        name: Build
+        id: docker-build
+        run: |
+          docker build --pull --file ${{ inputs.context }}/${{ inputs.dockerfile }} --tag ${{ inputs.name }}:${{ steps.gen-unique-id.outputs.unique-id }} ${{ inputs.context }}
+          docker save -o ${{ steps.gen-unique-id.outputs.unique-id }}-image.tar ${{ inputs.name }}:${{ steps.gen-unique-id.outputs.unique-id }}
+      -
+        name: Save artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-image
+          path: ${{ steps.gen-unique-id.outputs.unique-id }}-image.tar
+          retention-days: 1
+    outputs:
+      unique-id: ${{ steps.gen-unique-id.outputs.unique-id }}
+      cached-image-tag: ${{ inputs.name }}:${{ steps.gen-unique-id.outputs.unique-id }}
+
+  trivy:
+    name: Trivy Vulnerability Scan
+    needs: build
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      -
+        name: Configure Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+      -
+        name: Load artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: docker-image
+      -
+        name: Scan for vulnerabilities
+        uses: aquasecurity/trivy-action@0.7.1
+        with:
+          exit-code: '0'
+          format: json
+          hide-progress: false
+          ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
+          input: /github/workspace/${{ needs.build.outputs.unique-id }}-image.tar
+          output: ${{ needs.build.outputs.unique-id }}-trivy-scan-result.json
+          security-checks: vuln,config
+          severity: ${{ inputs.trivy-severity }}
+          trivyignores: ${{ inputs.trivy-ignore-files }}
+          vuln-type: os,library
+      -
+        name: Parse scan results
+        continue-on-error: ${{ inputs.trivy-error-is-success }}
+        shell: python
+        env:
+          RESULT_FILENAME: ${{ needs.build.outputs.unique-id }}-trivy-scan-result.json
+        id: parse
+        run: |
+          import json
+          import os
+          import sys
+
+          with open(os.getenv("RESULT_FILENAME"), "r") as f:
+              data = json.load(f)
+
+          exit_code = 0
+          for result in data.get("Results", []):
+              for vuln in result.get("Vulnerabilities", []):
+                  # Severity to report to GitHub
+                  sev = "error" if vuln.get("Severity") in ("HIGH", "CRITICAL") else "warning"
+                  msg = f"{vuln.get('Severity')} {vuln.get('VulnerabilityID')} {vuln.get('PkgName')}: {vuln.get('Title')} ({vuln.get('PrimaryURL')})"
+                  print(f"::{sev} ::{msg}")
+
+                  # Since severity filter is set at job level, we can exit non-zero for all
+                  # issues regardless of severity and let workflow consumers decide which
+                  # severity levels to care about.
+                  exit_code = 2
+
+          print(f"::set-output name=exit-code::{exit_code}")
+          print("Raw results:")
+          json.dump(data, sys.stdout)
+          sys.exit(exit_code)
+      -
+        name: Test results
+        if: ${{ inputs.trivy-error-is-success }}
+        run: |
+          test "x${{ steps.parse.outputs.exit-code }}" = "x2"
+
+  push:
+    if: inputs.push
+    name: Push
+    needs: [build, trivy]
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      -
+        name: Download cached image artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: docker-image
+      -
+        name: Load image cache
+        run: |
+          docker load --input ${{ needs.build.outputs.unique-id }}-image.tar
+      -
+        name: Generate image tags
+        uses: docker/metadata-action@v4
+        id: meta
+        with:
+          images: |
+            ${{ secrets.registry-url }}/${{ inputs.name }}
+          tags: |
+            type=ref,event=pr
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest,enable=${{ inputs.tag-latest }}
+      -
+        name: Docker login
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.registry-url }}
+          username: ${{ secrets.registry-username }}
+          password: ${{ secrets.registry-password }}
+      -
+        name: Push tags
+        id: push
+        env:
+          IMAGE: ${{ needs.build.outputs.cached-image-tag }}
+          TAGS: ${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}
+        run: |
+          echo "### Tags" >> $GITHUB_STEP_SUMMARY
+
+          digest=""
+          tags_stripped=""
+          for tag in $TAGS
+          do
+            docker tag "$IMAGE" $tag
+
+            # Capture the image digest. Doesn't matter that it gets overwritten
+            # every iteration, as they are all the same.
+            digest=$(docker push $tag | tee | grep -oP 'digest: \K(sha256:[0-9a-f]*)')
+
+            # Collect all tags, stripped of their secrets, so that the workflow
+            # is allowed to use them as output.
+            stripped=${tag#"${{ secrets.registry-url }}/"}
+            tags_stripped+="${stripped},"
+
+            # Add tag to summary output
+            echo "- \`<registry>/${stripped}\`" >> $GITHUB_STEP_SUMMARY
+          done
+          echo >> $GITHUB_STEP_SUMMARY
+
+          echo "::set-output name=image-tags-stripped::$(echo "$tags_stripped" | sed 's|,*$||')"
+          echo "::set-output name=image-digest::${digest}"
+
+          echo "### Digest" >> $GITHUB_STEP_SUMMARY
+          echo "- \`$digest\`" >> $GITHUB_STEP_SUMMARY
+          echo >> $GITHUB_STEP_SUMMARY
+
+          echo "### Image reference" >> $GITHUB_STEP_SUMMARY
+          echo "- \`<registry>/${{ inputs.name }}:${{ github.sha }}@${digest}\`" >> $GITHUB_STEP_SUMMARY
+    outputs:
+      image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.digest }}
+      image-tags-stripped: ${{ steps.push.outputs.image-tags-stripped }}
