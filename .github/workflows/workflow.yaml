@@ -87,7 +87,7 @@ jobs:
         name: Generate unique ID
         id: gen-unique-id
         run: |
-          echo "::set-output name=unique-id::$(date +%Y-%m-%d)-${{ github.sha }}-$(openssl rand -hex 20)"
+          echo "unique-id=$(date +%Y-%m-%d)-${{ github.sha }}-$(openssl rand -hex 20)" >> $GITHUB_OUTPUT
       -
         name: Checkout
         uses: actions/checkout@v3
@@ -167,7 +167,8 @@ jobs:
                   # severity levels to care about.
                   exit_code = 2
 
-          print(f"::set-output name=exit-code::{exit_code}")
+          with open(os.getenv("GITHUB_OUTPUT"), 'a') as f:
+            print(f"exit-code={exit_code}", file=f)
           print("Raw results:")
           json.dump(data, sys.stdout)
           sys.exit(exit_code)
@@ -239,8 +240,8 @@ jobs:
           done
           echo >> $GITHUB_STEP_SUMMARY
 
-          echo "::set-output name=image-tags-stripped::$(echo "$tags_stripped" | sed 's|,*$||')"
-          echo "::set-output name=image-digest::${digest}"
+          echo "image-tags-stripped=$(echo "$tags_stripped" | sed 's|,*$||')" >> $GITHUB_OUTPUT
+          echo "image-digest=${digest}" >> $GITHUB_OUTPUT
 
           echo "### Digest" >> $GITHUB_STEP_SUMMARY
           echo "- \`$digest\`" >> $GITHUB_STEP_SUMMARY
