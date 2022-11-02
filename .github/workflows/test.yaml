@@ -17,7 +17,7 @@ jobs:
       context: ./test/image-ok
       push: false
     secrets:
-      registry-url: example.com
+      registry-url: cr.example.com
       registry-username: foo
       registry-password: bar
       token: ${{ secrets.GITHUB_TOKEN }}
@@ -31,7 +31,7 @@ jobs:
       push: false
       trivy-error-is-success: true
     secrets:
-      registry-url: example.com
+      registry-url: cr.example.com
       registry-username: foo
       registry-password: bar
       token: ${{ secrets.GITHUB_TOKEN }}
