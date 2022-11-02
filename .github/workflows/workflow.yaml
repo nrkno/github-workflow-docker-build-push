@@ -77,6 +77,11 @@ jobs:
     name: Build and push
     runs-on: ${{ inputs.runs-on }}
     steps:
+
+      #
+      # Build
+      #
+
       -
         # A unique ID used to name artifacts produced.
         # At least on self-hosted runners, we seem to share the workspace directory
@@ -165,8 +170,8 @@ jobs:
       #
       # Push
       #
+
       -
-        if: inputs.push
         name: Generate image tags
         uses: docker/metadata-action@v4
         id: meta
