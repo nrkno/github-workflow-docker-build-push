@@ -116,8 +116,8 @@ jobs:
           format: json
           hide-progress: false
           ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
-          input: ./${{ steps.gen-unique-id.outputs.unique-id }}-image.tar
-          output: ${{ needs.build.outputs.unique-id }}-trivy-scan-result.json
+          input: ${{ steps.gen-unique-id.outputs.unique-id }}-image.tar
+          output: ${{ steps.gen-unique-id.outputs.unique-id }}-trivy-scan-result.json
           security-checks: vuln,config
           severity: ${{ inputs.trivy-severity }}
           trivyignores: ${{ inputs.trivy-ignore-files }}
