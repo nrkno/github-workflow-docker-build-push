@@ -195,7 +195,7 @@ jobs:
         name: Push tags
         id: push
         env:
-          IMAGE: ${{ needs.build.outputs.cached-image-tag }}
+          IMAGE: ${{ inputs.name }}:${{ steps.gen-unique-id.outputs.unique-id }}
           TAGS: ${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}
         run: |
           echo "### Tags" >> $GITHUB_STEP_SUMMARY
