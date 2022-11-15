@@ -39,13 +39,14 @@ all supported input and secret arguments.
 
 The *build*, *scan* and *push* phases have been merged into one job to
 simplify workflow runs. This degrades the visualisation of the pipeline,
-but the cost in speed and maintenance is too significant.
+but the save in speed and maintenance is significant. To separate the steps
+it is necessary to cache the built image between jobs, causing a lot of time
+spent uploading and downloading artifacts.
 
-The registry URL must be passed as a secret when its sourced from a repository
-secret. This seems to be  a limitation/security feature of reusable workflows.
-This also prevents us from printing the full image refs in the summary output,
-but also prevents us from exposing it as workflow outputs. This has been worked
-around by outputting tags stripped of their registry URLs.
+The registry URL must be passed as a secret when it's sourced from a repository
+secret. This prevents us from printing the full image refs in the workflow
+outputs and job summary. This has been worked around by outputting tags stripped
+of their registry URLs.
 
 ## References
 
