@@ -23,6 +23,13 @@ jobs:
       token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+### Outputs
+- `image-digest`: The image digest for this build
+- `image-ref-stripped`: An image reference for this build, stripped of its registry URL ("<name>:<sha>@<digest>")
+    - It is not possible to include secret values in outputs, so `registry-url` must be stripped from the image name.
+- `image-tags-stripped`: Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (i.e. "<name1>:<tag1>,<name2>:<tag2>")
+- `unique-id`: A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
+
 Please see the [workflow file][workflow] for a list with descriptions of
 all supported input and secret arguments.
 
