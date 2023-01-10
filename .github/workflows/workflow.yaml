@@ -220,6 +220,7 @@ jobs:
           done
           echo >> $GITHUB_STEP_SUMMARY
 
+          # Remove trailing comma before setting as output var
           echo "image-tags-stripped=$(echo "$tags_stripped" | sed 's|,*$||')" >> $GITHUB_OUTPUT
           echo "image-digest=${digest}" >> $GITHUB_OUTPUT
 
