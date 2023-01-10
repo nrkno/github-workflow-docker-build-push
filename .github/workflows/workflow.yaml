@@ -230,5 +230,5 @@ jobs:
           echo "### Image reference" >> $GITHUB_STEP_SUMMARY
           echo "- \`<registry>/${{ inputs.name }}:${{ github.sha }}@${digest}\`" >> $GITHUB_STEP_SUMMARY
     outputs:
-      image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.digest }}
+      image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
       image-tags-stripped: ${{ steps.push.outputs.image-tags-stripped }}
