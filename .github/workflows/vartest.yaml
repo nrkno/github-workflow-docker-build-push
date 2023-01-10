@@ -1,0 +1,44 @@
+name: Output tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    uses: ./.github/workflows/workflow.yaml
+    with:
+      runs-on: ubuntu-latest
+      name: github-workflow-docker-build-push/test
+      context: ./test/image-ok
+      push: true
+    secrets:
+      registry-url: ${{ secrets.CR_HOSTNAME }}
+      registry-username: ${{ secrets.CR_CLIENT_ID }}
+      registry-password: ${{ secrets.CR_CLIENT_SECRET }}
+      token: ${{ secrets.GITHUB_TOKEN }}
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Assert outputs are set
+        run: |
+          set -x
+          error=0
+          echo '${{ toJSON(needs.build.outputs) }}'
+          echo "Assert all outputs are set"
+          echo "image-digest"
+          if [[ -z "${{ needs.build.outputs.image-digest }}" ]]; then error=1; fi
+          echo "image-ref-stripped"
+          if [[ -z "${{ needs.build.outputs.image-ref-stripped }}" ]]; then error=1; fi
+          echo "image-tags-stripped"
+          if [[ -z "${{ needs.build.outputs.image-tags-stripped }}" ]]; then error=1; fi
+          echo "image-unique-id"
+          if [[ -z "${{ needs.build.outputs.unique-id }}" ]]; then error=1; fi
+          exit $error
