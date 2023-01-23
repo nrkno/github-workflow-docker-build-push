@@ -87,21 +87,33 @@ jobs:
         # At least on self-hosted runners, we seem to share the workspace directory
         # leading to race conditions if multiple instances of this workflow are
         # running in parallel within the same run.
-        name: Generate unique ID
-        id: gen-unique-id
+        name: Set environment
+        id: setup
         run: |
           echo "unique-id=$(date +%Y-%m-%d)-${{ github.sha }}-$(openssl rand -hex 20)" >> $GITHUB_OUTPUT
+          if [[ "${{ secrets.registry-username }}" != "" ]]
+          then
+            echo "docker_login=yes" >> $GITHUB_OUTPUT
+          fi
       -
         name: Checkout
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.token }}
       -
+        if: steps.setup.outputs.docker_login == 'yes'
+        name: Docker login
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.registry-url }}
+          username: ${{ secrets.registry-username }}
+          password: ${{ secrets.registry-password }}
+      -
         name: Build
         id: docker-build
         run: |
-          docker build --pull --file ${{ inputs.context }}/${{ inputs.dockerfile }} --tag ${{ inputs.name }}:${{ steps.gen-unique-id.outputs.unique-id }} ${{ inputs.context }}
-          docker save -o ./${{ steps.gen-unique-id.outputs.unique-id }}-image.tar ${{ inputs.name }}:${{ steps.gen-unique-id.outputs.unique-id }}
+          docker build --pull --file ${{ inputs.context }}/${{ inputs.dockerfile }} --tag ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }} ${{ inputs.context }}
+          docker save -o ./${{ steps.setup.outputs.unique-id }}-image.tar ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
 
       #
       # Vulnerability scan
@@ -121,8 +133,8 @@ jobs:
           format: json
           hide-progress: false
           ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
-          input: ${{ steps.gen-unique-id.outputs.unique-id }}-image.tar
-          output: ${{ steps.gen-unique-id.outputs.unique-id }}-trivy-scan-result.json
+          input: ${{ steps.setup.outputs.unique-id }}-image.tar
+          output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
           security-checks: vuln,config
           severity: ${{ inputs.trivy-severity }}
           trivyignores: ${{ inputs.trivy-ignore-files }}
@@ -133,7 +145,7 @@ jobs:
         continue-on-error: ${{ inputs.trivy-error-is-success }}
         shell: python
         env:
-          RESULT_FILENAME: ${{ steps.gen-unique-id.outputs.unique-id }}-trivy-scan-result.json
+          RESULT_FILENAME: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
         id: parse
         run: |
           import json
@@ -195,7 +207,7 @@ jobs:
         name: Push tags
         id: push
         env:
-          IMAGE: ${{ inputs.name }}:${{ steps.gen-unique-id.outputs.unique-id }}
+          IMAGE: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
           TAGS: ${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}
         run: |
           echo "### Tags" >> $GITHUB_STEP_SUMMARY
