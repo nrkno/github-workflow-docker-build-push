@@ -18,8 +18,8 @@ jobs:
       push: false
     secrets:
       registry-url: cr.example.com
-      registry-username: foo
-      registry-password: bar
+      registry-username: ""
+      registry-password: ""
       token: ${{ secrets.GITHUB_TOKEN }}
 
   image-vulnerable:
@@ -32,6 +32,6 @@ jobs:
       trivy-error-is-success: true
     secrets:
       registry-url: cr.example.com
-      registry-username: foo
-      registry-password: bar
+      registry-username: ""
+      registry-password: ""
       token: ${{ secrets.GITHUB_TOKEN }}
