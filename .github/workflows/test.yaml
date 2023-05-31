@@ -12,7 +12,7 @@ jobs:
   image-ok:
     uses: ./.github/workflows/workflow.yaml
     with:
-      runs-on: ubuntu-latest
+      runs-on: "['ubuntu-latest']"
       name: test
       context: ./test/image-ok
       push: false
@@ -25,7 +25,7 @@ jobs:
   image-vulnerable:
     uses: ./.github/workflows/workflow.yaml
     with:
-      runs-on: ubuntu-latest
+      runs-on: "['ubuntu-latest']"
       name: test
       context: ./test/image-vulnerable
       push: false

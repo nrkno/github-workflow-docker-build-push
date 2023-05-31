@@ -23,7 +23,7 @@ on:
         description: Tag a successfully built image with the tag latest.
       runs-on:
         type: string
-        default: self-hosted
+        default: "['self-hosted']"
         description: Type of runner for the jobs. For non-self-hosted runners, use ubuntu-latest for example.
       trivy-enabled:
         type: boolean
@@ -75,7 +75,7 @@ on:
 jobs:
   build:
     name: Build and push
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJson(inputs.runs-on) }}
     steps:
 
       #
