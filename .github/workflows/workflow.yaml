@@ -135,7 +135,7 @@ jobs:
           ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
           input: ${{ steps.setup.outputs.unique-id }}-image.tar
           output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
-          security-checks: vuln,config
+          scanners: vuln,config
           severity: ${{ inputs.trivy-severity }}
           trivyignores: ${{ inputs.trivy-ignore-files }}
           vuln-type: os,library
