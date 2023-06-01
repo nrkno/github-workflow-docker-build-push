@@ -206,11 +206,11 @@ jobs:
         if: inputs.push
         name: Push tags
         id: push
-        env:
-          IMAGE: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          TAGS: ${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}
         run: |
           echo "### Tags" >> $GITHUB_STEP_SUMMARY
+
+          export IMAGE='${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}'
+          export TAGS='${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}'
 
           digest=""
           tags_stripped=""
