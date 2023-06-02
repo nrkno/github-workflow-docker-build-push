@@ -21,6 +21,10 @@ on:
         type: boolean
         default: false
         description: Tag a successfully built image with the tag latest.
+      registry-url:
+        type: string
+        description: URL to the container registry.
+        required: true
       runs-on:
         type: string
         default: "['self-hosted']"
@@ -46,9 +50,6 @@ on:
         default: MEDIUM,HIGH,CRITICAL
         description: Comma-separated list of severities to consider an error.
     secrets:
-      registry-url:
-        description: URL to the container registry.
-        required: true
       registry-username:
         description: Username for the container registry.
         required: true
@@ -59,6 +60,7 @@ on:
         description: GitHub auth token.
         required: true
     outputs:
+      # TODO: add registry-url to image output
       image-digest:
         description: The image digest for this build.
         value: ${{ jobs.build.outputs.image-digest }}
@@ -105,7 +107,7 @@ jobs:
         name: Docker login
         uses: docker/login-action@v2
         with:
-          registry: ${{ secrets.registry-url }}
+          registry: ${{ inputs.registry-url }}
           username: ${{ secrets.registry-username }}
           password: ${{ secrets.registry-password }}
       -
@@ -189,7 +191,7 @@ jobs:
         id: meta
         with:
           images: |
-            ${{ secrets.registry-url }}/${{ inputs.name }}
+            ${{ inputs.registry-url }}/${{ inputs.name }}
           tags: |
             type=ref,event=pr
             type=raw,value=${{ github.sha }}
@@ -199,7 +201,7 @@ jobs:
         name: Docker login
         uses: docker/login-action@v2
         with:
-          registry: ${{ secrets.registry-url }}
+          registry: ${{ inputs.registry-url }}
           username: ${{ secrets.registry-username }}
           password: ${{ secrets.registry-password }}
       -

@@ -11,13 +11,13 @@ jobs:
     uses: nrkno/github-workflow-docker-build-push/.github/workflows/workflow.yaml@v1
     with:
       runs-on: "['self-hosted', 'linux']"
+      registry-url: registry-url-string
       name: my-project-name/my-image-name
       # Tag with 'latest' tag when merging to main
       tag-latest: ${{ github.ref == 'refs/heads/main' }}
       # Only push when merging to main
       push: ${{ github.ref == 'refs/heads/main' }}
     secrets:
-      registry-url: secret-string
       registry-username: secret-string
       registry-password: secret-string
       token: ${{ secrets.GITHUB_TOKEN }}
