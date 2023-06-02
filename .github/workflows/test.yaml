@@ -13,11 +13,11 @@ jobs:
     uses: ./.github/workflows/workflow.yaml
     with:
       runs-on: "['ubuntu-latest']"
+      registry-url: cr.example.com
       name: test
       context: ./test/image-ok
       push: false
     secrets:
-      registry-url: cr.example.com
       registry-username: ""
       registry-password: ""
       token: ${{ secrets.GITHUB_TOKEN }}
@@ -26,12 +26,12 @@ jobs:
     uses: ./.github/workflows/workflow.yaml
     with:
       runs-on: "['ubuntu-latest']"
+      registry-url: cr.example.com
       name: test
       context: ./test/image-vulnerable
       push: false
       trivy-error-is-success: true
     secrets:
-      registry-url: cr.example.com
       registry-username: ""
       registry-password: ""
       token: ${{ secrets.GITHUB_TOKEN }}
