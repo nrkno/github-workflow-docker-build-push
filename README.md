@@ -30,6 +30,7 @@ jobs:
 - `push` (boolean, default `true`) - Push a successfully built image to a registry.
 - `name` (string, **required**) - Image name (repository path) within a registry.
 - `tag-latest` (boolean, default `false`) - Tag a successfully built image with the tag latest.
+- `registry-url` (string, **required**) - URL to the container registry.
 - `runs-on` (string, default `"['self-hosted']"`) - Type of runner for the jobs. For non-self-hosted runners, use ubuntu-latest for example.
 - `trivy-enabled` (boolean, default `true`) - Scan the built image for known vulnerabilities using Trivy.
 - `trivy-error-is-success` (boolean, default `false`) - Do not produce an error if the Trivy scan fails. Primarily used for testing.
@@ -38,7 +39,6 @@ jobs:
 - `trivy-severity` (string, default `"MEDIUM,HIGH,CRITICAL"`) - Comma-separated list of severities to consider an error.
 
 ### Secrets
-- `registry-url` (**required**) - URL to the container registry.
 - `registry-username` (**required**) - Username for the container registry.
 - `registry-password` (**required**) - Password for the container registry.
 - `token` (**required**) - GitHub auth token.
