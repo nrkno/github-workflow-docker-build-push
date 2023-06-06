@@ -29,6 +29,9 @@ jobs:
 - `dockerfile` (string, default `"Dockerfile"`) - Path to a Dockerfile relative to the Docker build context path.
 - `push` (boolean, default `true`) - Push a successfully built image to a registry.
 - `name` (string, **required**) - Image name (repository path) within a registry.
+- `tag-branch` (boolean, default `false`) - Tag a successfully built image with the branch name.
+- `tag-sha` (boolean, default `true`) - Tag a successfully built image with the commit SHA that triggered the workflow.
+- `tag-pr` (boolean, default `true`) - Tag a successfully built image with reference to a Pull Request, e.g. pr-2.
 - `tag-latest` (boolean, default `false`) - Tag a successfully built image with the tag latest.
 - `registry-url` (string, **required**) - URL to the container registry.
 - `runs-on` (string, default `"['self-hosted']"`) - Type of runner for the jobs. For non-self-hosted runners, use ubuntu-latest for example.
