@@ -13,6 +13,7 @@ on:
         type: boolean
         default: true
         description: Push a successfully built image to a registry.
+        example: foobar
       name:
         type: string
         description: Image name (repository path) within a registry.
