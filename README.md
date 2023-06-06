@@ -11,7 +11,7 @@ jobs:
     uses: nrkno/github-workflow-docker-build-push/.github/workflows/workflow.yaml@v1
     with:
       runs-on: "['self-hosted', 'linux']"
-      registry-url: registry-url-string
+      registry-url: myregistry.azurecr.io
       name: my-project-name/my-image-name
       # Tag with 'latest' tag when merging to main
       tag-latest: ${{ github.ref == 'refs/heads/main' }}
