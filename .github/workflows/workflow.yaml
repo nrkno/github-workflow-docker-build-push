@@ -17,6 +17,18 @@ on:
         type: string
         description: Image name (repository path) within a registry.
         required: true
+      tag-branch:
+        type: boolean
+        default: false
+        description: Tag a successfully built image with the branch name.
+      tag-sha:
+        type: boolean
+        default: true
+        description: Tag a successfully built image with the commit SHA that triggered the workflow.
+      tag-pr:
+        type: boolean
+        default: true
+        description: Tag a successfully built image with reference to a Pull Request, e.g. pr-2.
       tag-latest:
         type: boolean
         default: false
@@ -193,9 +205,11 @@ jobs:
           images: |
             ${{ inputs.registry-url }}/${{ inputs.name }}
           tags: |
-            type=ref,event=pr
-            type=raw,value=${{ github.sha }}
+            type=ref,event=pr,enable=${{ inputs.tag-pr }}
+            type=ref,event=branch,enable=${{ inputs.tag-branch }}
+            type=raw,value=${{ github.sha }},enable=${{ inputs.tag-sha }}
             type=raw,value=latest,enable=${{ inputs.tag-latest }}
+
       -
         if: inputs.push
         name: Docker login
