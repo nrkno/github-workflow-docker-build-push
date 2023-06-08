@@ -77,16 +77,16 @@ on:
         value: ${{ jobs.build.outputs.image-digest }}
       image-ref:
         description: An image reference for this build (`<name>:<git-sha>@<digest>`).
-        value: ${{ jobs.push.outputs.image-ref }}
+        value: ${{ jobs.build.outputs.image-ref }}
       image-ref-stripped:
         description: An image reference for this build, stripped of its registry URL (`<name>:<git-sha>@<digest>`).
-        value: ${{ jobs.push.outputs.image-ref-stripped }}
+        value: ${{ jobs.build.outputs.image-ref-stripped }}
       image-tags:
         description: Comma-separated list of generated image tags for this build, (`<registry-url>/<name1>:<tag1>,<registry-url>/<name1>:<tag2>`).
-        value: ${{ jobs.push.outputs.image-tags }}
+        value: ${{ jobs.build.outputs.image-tags }}
       image-tags-stripped:
         description: Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (`<name1>:<tag1>,<name1>:<tag2>`).
-        value: ${{ jobs.push.outputs.image-tags-stripped }}
+        value: ${{ jobs.build.outputs.image-tags-stripped }}
       unique-id:
         description: A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
         value: ${{ jobs.build.outputs.unique-id }}
