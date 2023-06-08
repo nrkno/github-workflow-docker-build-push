@@ -72,10 +72,12 @@ on:
         description: GitHub auth token.
         required: true
     outputs:
-      # TODO: add registry-url to image output
       image-digest:
         description: The image digest for this build.
         value: ${{ jobs.build.outputs.image-digest }}
+      image-ref:
+        description: An image reference for this build (`<name>:<git-sha>@<digest>`).
+        value: ${{ jobs.push.outputs.image-ref }}
       image-ref-stripped:
         description: An image reference for this build, stripped of its registry URL ("<name>:<sha>@<digest>").
         value: ${{ jobs.push.outputs.image-ref-stripped }}
@@ -259,5 +261,6 @@ jobs:
           echo "### Image reference" >> $GITHUB_STEP_SUMMARY
           echo "- \`<registry>/${{ inputs.name }}:${{ github.sha }}@${digest}\`" >> $GITHUB_STEP_SUMMARY
     outputs:
+      image-ref: ${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
       image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
       image-tags-stripped: ${{ steps.push.outputs.image-tags-stripped }}
