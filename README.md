@@ -48,8 +48,10 @@ jobs:
 
 ### Outputs
 - `image-digest` - The image digest for this build.
-- `image-ref-stripped` - An image reference for this build, stripped of its registry URL ("<name>:<sha>@<digest>").
-- `image-tags-stripped` - Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (i.e. "<name1>:<tag1>,<name2>:<tag2>").
+- `image-ref` - An image reference for this build (`<name>:<git-sha>@<digest>`).
+- `image-ref-stripped` - An image reference for this build, stripped of its registry URL (`<name>:<git-sha>@<digest>`).
+- `image-tags` - Comma-separated list of generated image tags for this build, (`<registry-url>/<name1>:<tag1>,<registry-url>/<name1>:<tag2>`).
+- `image-tags-stripped` - Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (`<name1>:<tag1>,<name1>:<tag2>`).
 - `unique-id` - A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
 <!-- autodoc end -->
 
