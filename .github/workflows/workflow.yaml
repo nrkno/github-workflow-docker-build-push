@@ -246,7 +246,7 @@ jobs:
 
             # Collect all tags, both stripped of the registry URL and not.
             tags+="${tag},"
-            stripped=${tag#"${{ secrets.registry-url }}/"}
+            stripped=${tag#"${{ inputs.registry-url }}/"}
             tags_stripped+="${stripped},"
 
             # Add tag to summary output
