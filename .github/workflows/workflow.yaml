@@ -271,3 +271,4 @@ jobs:
       image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
       image-tags: ${{ steps.push.outputs.image-tags }}
       image-tags-stripped: ${{ steps.push.outputs.image-tags-stripped }}
+      unique-id: ${{ steps.setup.outputs.unique-id }}
