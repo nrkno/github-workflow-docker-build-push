@@ -81,6 +81,9 @@ on:
       image-ref-stripped:
         description: An image reference for this build, stripped of its registry URL ("<name>:<sha>@<digest>").
         value: ${{ jobs.push.outputs.image-ref-stripped }}
+      image-tags:
+        description: Comma-separated list of generated image tags for this build, (`<registry-url>/<name1>:<tag1>,<registry-url>/<name1>:<tag2>`).
+        value: ${{ jobs.push.outputs.image-tags }}
       image-tags-stripped:
         description: Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (i.e. "<name1>:<tag1>,<name2>:<tag2>").
         value: ${{ jobs.push.outputs.image-tags-stripped }}
@@ -231,6 +234,7 @@ jobs:
           export TAGS='${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}'
 
           digest=""
+          tags=""
           tags_stripped=""
           for tag in $TAGS
           do
@@ -240,17 +244,18 @@ jobs:
             # every iteration, as they are all the same.
             digest=$(docker push $tag | tee | grep -oP 'digest: \K(sha256:[0-9a-f]*)')
 
-            # Collect all tags, stripped of their secrets, so that the workflow
-            # is allowed to use them as output.
+            # Collect all tags, both stripped of the registry URL and not.
+            tags+="${tag},"
             stripped=${tag#"${{ secrets.registry-url }}/"}
             tags_stripped+="${stripped},"
 
             # Add tag to summary output
-            echo "- \`<registry>/${stripped}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${tag}\`" >> $GITHUB_STEP_SUMMARY
           done
           echo >> $GITHUB_STEP_SUMMARY
 
           # Remove trailing comma before setting as output var
+          echo "image-tags=$(echo "$tags" | sed 's|,*$||')" >> $GITHUB_OUTPUT
           echo "image-tags-stripped=$(echo "$tags_stripped" | sed 's|,*$||')" >> $GITHUB_OUTPUT
           echo "image-digest=${digest}" >> $GITHUB_OUTPUT
 
@@ -263,4 +268,5 @@ jobs:
     outputs:
       image-ref: ${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
       image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
+      image-tags: ${{ steps.push.outputs.image-tags }}
       image-tags-stripped: ${{ steps.push.outputs.image-tags-stripped }}
