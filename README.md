@@ -27,6 +27,7 @@ jobs:
 ### Inputs
 - `context` (string, default `"."`) - The root directory for the Docker build context.
 - `dockerfile` (string, default `"Dockerfile"`) - Path to a Dockerfile relative to the Docker build context path.
+- `git-submodules` (boolean, default `false`) - Whether to also checkout Git submodules.
 - `push` (boolean, default `true`) - Push a successfully built image to a registry.
 - `name` (string, **required**) - Image name (repository path) within a registry.
 - `tag-branch` (boolean, default `false`) - Tag a successfully built image with the branch name.
@@ -43,6 +44,7 @@ jobs:
 - `trivy-summary-enabled` (boolean, default `false`) - Render a table of all the Trivy findings in the GitHub summary for the workflow.
 
 ### Secrets
+- `git-ssh-key` - SSH key used by Git to checkout the repository.
 - `registry-username` (**required**) - Username for the container registry.
 - `registry-password` (**required**) - Password for the container registry.
 - `token` (**required**) - GitHub auth token.
