@@ -37,6 +37,10 @@ on:
         type: boolean
         default: false
         description: Tag a successfully built image with the tag latest.
+      tag-extra:
+        type: string
+        default: ""
+        description: Comma-separated list of additional image tags.
       registry-url:
         type: string
         description: URL to the container registry.
@@ -255,6 +259,13 @@ jobs:
       #
 
       -
+        name: Build list of additional tags
+        id: additional-tags
+        uses: actions/github-script@v6.4.1
+        with:
+          script: |
+            core.setOutput('tags', `${{ inputs.tag-extra }}`.split(",").join("\n"))
+      -
         name: Generate image tags
         uses: docker/metadata-action@v4
         id: meta
@@ -266,7 +277,7 @@ jobs:
             type=ref,event=branch,enable=${{ inputs.tag-branch }}
             type=raw,value=${{ github.sha }},enable=${{ inputs.tag-sha }}
             type=raw,value=latest,enable=${{ inputs.tag-latest }}
-
+            ${{ steps.additional-tags.outputs.tags }}
       -
         if: inputs.push
         name: Docker login
