@@ -70,6 +70,9 @@ on:
         default: false
         description: Render a table of all the Trivy findings in the GitHub summary for the workflow.
     secrets:
+      git-ssh-key:
+        description: SSH key used by Git to checkout the repository.
+        required: false
       registry-username:
         description: Username for the container registry.
         required: true
@@ -128,6 +131,7 @@ jobs:
         with:
           token: ${{ secrets.token }}
           submodules: ${{ inputs.git-submodules }}
+          ssh-key: ${{ secrets.git-ssh-key }}
       -
         if: steps.setup.outputs.docker_login == 'yes'
         name: Docker login
