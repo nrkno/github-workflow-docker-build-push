@@ -35,3 +35,17 @@ jobs:
       registry-username: ""
       registry-password: ""
       token: ${{ secrets.GITHUB_TOKEN }}
+
+  image-with-extra-tags:
+    uses: ./.github/workflows/workflow.yaml
+    with:
+      runs-on: "['ubuntu-latest']"
+      registry-url: cr.example.com
+      name: test
+      context: ./test/image-ok
+      push: false
+      tag-extra: foo,bar,baz
+    secrets:
+      registry-username: ""
+      registry-password: ""
+      token: ${{ secrets.GITHUB_TOKEN }}
