@@ -61,6 +61,10 @@ on:
         type: string
         default: MEDIUM,HIGH,CRITICAL
         description: Comma-separated list of severities to consider an error.
+      summary-enabled:
+        type: boolean
+        default: false
+        description: Render a table of all the Trivy findings in the Github summary for the workflow
     secrets:
       registry-username:
         description: Username for the container registry.
@@ -143,6 +147,31 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+      -
+        if: inputs.trivy-enabled && inputs.summary-enabled
+        name: Scan for vulnerabilities (table format)
+        uses: aquasecurity/trivy-action@0.11.2
+        with:
+          exit-code: '0'
+          hide-progress: false
+          ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
+          input: ${{ steps.setup.outputs.unique-id }}-image.tar
+          output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt
+          scanners: vuln,config
+          severity: ${{ inputs.trivy-severity }}
+          trivyignores: ${{ inputs.trivy-ignore-files }}
+          vuln-type: os,library
+      -
+        if: inputs.trivy-enabled && inputs.summary-enabled
+        name: Post all scan results to Github Summary as a table
+        run: |
+          echo "# Trivy scan results" >> $GITHUB_STEP_SUMMARY
+
+          echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
+          cat ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt >> $GITHUB_STEP_SUMMARY
+          echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
+        env:
+          CODE_BLOCK: "```"
       -
         if: inputs.trivy-enabled
         name: Scan for vulnerabilities
