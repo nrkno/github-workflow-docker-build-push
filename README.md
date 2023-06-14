@@ -42,6 +42,7 @@ jobs:
 - `trivy-ignore-files` (string, default `""`) - Comma-separated list of paths to Trivy ignore files, relative to the repository root.
 - `trivy-severity` (string, default `"MEDIUM,HIGH,CRITICAL"`) - Comma-separated list of severities to consider an error.
 - `trivy-summary-enabled` (boolean, default `false`) - Render a table of all the Trivy findings in the GitHub summary for the workflow.
+- `trivy-sbom-enabled` (boolean, default `false`) - Generate an SBOM of your dependencies and submit them to GitHub Dependency Graph.
 
 ### Secrets
 - `git-ssh-key` - SSH key used by Git to checkout the repository.
