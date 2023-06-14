@@ -158,11 +158,11 @@ jobs:
           input: ${{ steps.setup.outputs.unique-id }}-image.tar
           output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt
           scanners: vuln,config
-          severity: ${{ inputs.trivy-severity }}
+          severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
           trivyignores: ${{ inputs.trivy-ignore-files }}
           vuln-type: os,library
       -
-        if: inputs.trivy-enabled && inputs.summary-enabled
+        if: inputs.trivy-enabled && inputs.trivy-summary-enabled
         name: Post all scan results to Github Summary as a table
         env:
           CODE_BLOCK: "```"
