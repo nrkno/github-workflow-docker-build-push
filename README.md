@@ -40,7 +40,7 @@ jobs:
 - `trivy-ignore-unfixed` (boolean, default `true`) - Ignore errors that do not have a known fix.
 - `trivy-ignore-files` (string, default `""`) - Comma-separated list of paths to Trivy ignore files, relative to the repository root.
 - `trivy-severity` (string, default `"MEDIUM,HIGH,CRITICAL"`) - Comma-separated list of severities to consider an error.
-- `summary-enabled` (boolean, default `false`) - Render a table of all the Trivy findings in the Github summary for the workflow
+- `trivy-summary-enabled` (boolean, default `false`) - Render a table of all the Trivy findings in the GitHub summary for the workflow.
 
 ### Secrets
 - `registry-username` (**required**) - Username for the container registry.
