@@ -69,6 +69,10 @@ on:
         type: boolean
         default: false
         description: Render a table of all the Trivy findings in the GitHub summary for the workflow.
+      trivy-sbom-enabled:
+        type: boolean
+        default: false
+        description: Generate an SBOM of your dependencies and submit them to GitHub Dependency Graph.
     secrets:
       git-ssh-key:
         description: SSH key used by Git to checkout the repository.
@@ -181,6 +185,16 @@ jobs:
           echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
           cat ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt >> $GITHUB_STEP_SUMMARY
           echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
+      -
+        if: inputs.trivy-sbom-enabled
+        name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
+        uses: aquasecurity/trivy-action@0.11.2
+        with:
+          format: github
+          hide-progress: false
+          output: 'dependency-results.sbom.json'
+          input: ${{ steps.setup.outputs.unique-id }}-image.tar
+          github-pat: ${{ secrets.GITHUB_TOKEN }}
       -
         if: inputs.trivy-enabled
         name: Scan for vulnerabilities
