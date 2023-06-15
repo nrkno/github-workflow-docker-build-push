@@ -34,6 +34,7 @@ jobs:
 - `tag-sha` (boolean, default `true`) - Tag a successfully built image with the commit SHA that triggered the workflow.
 - `tag-pr` (boolean, default `true`) - Tag a successfully built image with reference to a Pull Request, e.g. pr-2.
 - `tag-latest` (boolean, default `false`) - Tag a successfully built image with the tag latest.
+- `tag-extra` (string, default `""`) - Comma-separated list of additional image tags.
 - `registry-url` (string, **required**) - URL to the container registry.
 - `runs-on` (string, default `"['self-hosted']"`) - Type of runner for the jobs. For non-self-hosted runners, use ubuntu-latest for example.
 - `trivy-enabled` (boolean, default `true`) - Scan the built image for known vulnerabilities using Trivy.
