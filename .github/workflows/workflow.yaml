@@ -279,7 +279,7 @@ jobs:
             type=raw,value=latest,enable=${{ inputs.tag-latest }}
             ${{ steps.additional-tags.outputs.tags }}
       -
-        if: inputs.push
+        if: inputs.push && steps.setup.outputs.docker_login == 'yes'
         name: Docker login
         uses: docker/login-action@v2
         with:
@@ -287,7 +287,7 @@ jobs:
           username: ${{ secrets.registry-username }}
           password: ${{ secrets.registry-password }}
       -
-        if: inputs.push
+        if: inputs.push && steps.setup.outputs.docker_login == 'yes'
         name: Push tags
         id: push
         run: |
