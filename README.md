@@ -27,6 +27,7 @@ jobs:
 ### Inputs
 - `context` (string, default `"."`) - The root directory for the Docker build context.
 - `dockerfile` (string, default `"Dockerfile"`) - Path to a Dockerfile relative to the Docker build context path.
+- `git-ref` (string, default `""`) - The branch, tag or SHA to checkout. Leave empty for the current branch ref.
 - `git-submodules` (boolean, default `false`) - Whether to also checkout Git submodules.
 - `push` (boolean, default `true`) - Push a successfully built image to a registry.
 - `name` (string, **required**) - Image name (repository path) within a registry.
