@@ -9,6 +9,10 @@ on:
         type: string
         default: Dockerfile
         description: Path to a Dockerfile relative to the Docker build context path.
+      git-ref:
+        type: string
+        default: ""
+        description: The branch, tag or SHA to checkout. Leave empty for the current branch ref.
       git-submodules:
         type: boolean
         default: false
@@ -137,6 +141,7 @@ jobs:
         name: Checkout
         uses: actions/checkout@v3
         with:
+          ref: ${{ inputs.git-ref }}
           token: ${{ secrets.token }}
           submodules: ${{ inputs.git-submodules }}
           ssh-key: ${{ secrets.git-ssh-key }}
