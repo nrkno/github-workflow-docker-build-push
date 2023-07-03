@@ -314,14 +314,6 @@ jobs:
             ${{ steps.additional-tags.outputs.tags }}
       -
         if: inputs.push && steps.setup.outputs.docker_login == 'yes'
-        name: Docker login
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ inputs.registry-url }}
-          username: ${{ secrets.registry-username }}
-          password: ${{ secrets.registry-password }}
-      -
-        if: inputs.push && steps.setup.outputs.docker_login == 'yes'
         name: Push tags
         id: push
         run: |
