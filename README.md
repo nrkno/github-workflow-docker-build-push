@@ -8,7 +8,7 @@ a container registry.
 ```yaml
 jobs:
   build-push:
-    uses: nrkno/github-workflow-docker-build-push/.github/workflows/workflow.yaml@v3.0.0
+    uses: nrkno/github-workflow-docker-build-push/.github/workflows/workflow.yaml@v4.0.0
     with:
       runs-on: "['self-hosted', 'linux']"
       registry-url: myregistry.azurecr.io
