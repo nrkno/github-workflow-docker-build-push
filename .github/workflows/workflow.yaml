@@ -167,7 +167,7 @@ jobs:
       -
         if: inputs.cache == false
         name: Build (no cache)
-        uses: docker/build-push-action@v4.1.1
+        uses: docker/build-push-action@v4.2.1
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
@@ -178,7 +178,7 @@ jobs:
       -
         if: inputs.cache == true
         name: Build (with cache)
-        uses: docker/build-push-action@v4.1.1
+        uses: docker/build-push-action@v4.2.1
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
