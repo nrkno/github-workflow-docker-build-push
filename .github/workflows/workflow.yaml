@@ -301,7 +301,7 @@ jobs:
             core.setOutput('tags', `${{ inputs.tag-extra }}`.split(",").join("\n"))
       -
         name: Generate image tags
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         id: meta
         with:
           images: |
