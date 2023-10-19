@@ -166,6 +166,19 @@ jobs:
           username: ${{ secrets.registry-username }}
           password: ${{ secrets.registry-password }}
       -
+        name: Generate image tags
+        uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: |
+            ${{ inputs.registry-url }}/${{ inputs.name }}
+          tags: |
+            type=raw,value=${{ github.sha }},enable=${{ inputs.tag-sha }}
+            type=ref,event=pr,enable=${{ inputs.tag-pr }}
+            type=ref,event=branch,enable=${{ inputs.tag-branch }}
+            type=raw,value=latest,enable=${{ inputs.tag-latest }}
+            ${{ steps.additional-tags.outputs.tags }}
+      -
         if: inputs.cache == false
         name: Build (no cache)
         uses: docker/build-push-action@v5.0.0
@@ -174,8 +187,7 @@ jobs:
           context: ${{ inputs.context }}
           push: false
           pull: true
-          tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          outputs: type=docker
+          tags: ${{ steps.meta.outputs.tags }}
       -
         if: inputs.cache == true
         name: Build (with cache)
@@ -185,7 +197,7 @@ jobs:
           context: ${{ inputs.context }}
           push: false
           pull: true
-          tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          tags: ${{ steps.meta.outputs.tags }}
           outputs: type=docker
           cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
           cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
@@ -207,7 +219,7 @@ jobs:
           exit-code: '0'
           hide-progress: false
           ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
-          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt
           scanners: vuln,config
           severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
@@ -232,7 +244,7 @@ jobs:
           format: github
           hide-progress: false
           output: 'dependency-results.sbom.json'
-          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           github-pat: ${{ secrets.GITHUB_TOKEN }}
       -
         if: inputs.trivy-enabled
@@ -243,7 +255,7 @@ jobs:
           format: json
           hide-progress: false
           ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
-          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
           scanners: vuln,config
           severity: ${{ inputs.trivy-severity }}
@@ -301,39 +313,31 @@ jobs:
           script: |
             core.setOutput('tags', `${{ inputs.tag-extra }}`.split(",").join("\n"))
       -
-        name: Generate image tags
-        uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: |
-            ${{ inputs.registry-url }}/${{ inputs.name }}
-          tags: |
-            type=ref,event=pr,enable=${{ inputs.tag-pr }}
-            type=ref,event=branch,enable=${{ inputs.tag-branch }}
-            type=raw,value=${{ github.sha }},enable=${{ inputs.tag-sha }}
-            type=raw,value=latest,enable=${{ inputs.tag-latest }}
-            ${{ steps.additional-tags.outputs.tags }}
-      -
-        if: inputs.push && steps.setup.outputs.docker_login == 'yes'
         name: Push tags
         id: push
+        uses: docker/build-push-action@v5.0.0
+        with:
+          file: ${{ inputs.context }}/${{ inputs.dockerfile }}
+          context: ${{ inputs.context }}
+          push: ${{ inputs.push && steps.setup.outputs.docker_login == 'yes' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
+      -
+        if: inputs.push && steps.setup.outputs.docker_login == 'yes'
+        name: Summary
+        id: summary
         run: |
           echo "### Tags" >> $GITHUB_STEP_SUMMARY
 
           export IMAGE='${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}'
           export TAGS='${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}'
 
-          digest=""
+          digest="${{ steps.push.outputs.digest }}"
           tags=""
           tags_stripped=""
           for tag in $TAGS
           do
-            docker tag "$IMAGE" $tag
-
-            # Capture the image digest. Doesn't matter that it gets overwritten
-            # every iteration, as they are all the same.
-            digest=$(docker push $tag | tee | grep -oP 'digest: \K(sha256:[0-9a-f]*)')
-
             # Collect all tags, both stripped of the registry URL and not.
             tags+="${tag},"
             stripped=${tag#"${{ inputs.registry-url }}/"}
@@ -356,9 +360,9 @@ jobs:
           echo "### Image reference" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${digest}\`" >> $GITHUB_STEP_SUMMARY
     outputs:
-      image-digest: ${{ steps.push.outputs.image-digest }}
-      image-ref: ${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
-      image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
-      image-tags: ${{ steps.push.outputs.image-tags }}
-      image-tags-stripped: ${{ steps.push.outputs.image-tags-stripped }}
+      image-digest: ${{ steps.summary.outputs.image-digest }}
+      image-ref: ${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${{ steps.summary.outputs.image-digest }}
+      image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.summary.outputs.image-digest }}
+      image-tags: ${{ steps.summary.outputs.image-tags }}
+      image-tags-stripped: ${{ steps.summary.outputs.image-tags-stripped }}
       unique-id: ${{ steps.setup.outputs.unique-id }}
