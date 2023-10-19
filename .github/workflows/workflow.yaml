@@ -134,9 +134,10 @@ jobs:
 
       -
         # A unique ID used to name artifacts produced.
-        # At least on self-hosted runners, we seem to share the workspace directory
-        # leading to race conditions if multiple instances of this workflow are
-        # running in parallel within the same run.
+        # On some self-hosted runners the workspace directory might be shared
+        # between runs, leading to race conditions if multiple instances of this
+        # workflow are running in parallel.
+        # Use the unique-id when writing files or need a unique identifier for the run.
         name: Set environment
         id: setup
         run: |
