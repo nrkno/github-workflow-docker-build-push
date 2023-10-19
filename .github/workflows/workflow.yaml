@@ -207,6 +207,7 @@ jobs:
       #
 
       -
+        if: inputs.trivy-enabled && inputs.trivy-summary-enabled
         name: Configure Python
         uses: actions/setup-python@v4
         with:
