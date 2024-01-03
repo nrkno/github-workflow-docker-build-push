@@ -201,7 +201,7 @@ jobs:
       -
         if: inputs.trivy-enabled && inputs.trivy-summary-enabled
         name: Scan for vulnerabilities (table format)
-        uses: aquasecurity/trivy-action@0.16.0
+        uses: aquasecurity/trivy-action@0.16.1
         with:
           exit-code: '0'
           hide-progress: false
@@ -226,7 +226,7 @@ jobs:
       -
         if: inputs.trivy-sbom-enabled
         name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
-        uses: aquasecurity/trivy-action@0.16.0
+        uses: aquasecurity/trivy-action@0.16.1
         with:
           format: github
           hide-progress: false
@@ -236,7 +236,7 @@ jobs:
       -
         if: inputs.trivy-enabled
         name: Scan for vulnerabilities
-        uses: aquasecurity/trivy-action@0.16.0
+        uses: aquasecurity/trivy-action@0.16.1
         with:
           exit-code: '0'
           format: json
