@@ -1,6 +1,14 @@
 on:
   workflow_call:
     inputs:
+      cache:
+        type: boolean
+        default: true
+        description: Whether to enable image layer cache.
+      cache-tag:
+        type: string
+        default: buildcache
+        description: Image tag to use for image layer cache.
       context:
         type: string
         default: "."
@@ -9,6 +17,14 @@ on:
         type: string
         default: Dockerfile
         description: Path to a Dockerfile relative to the Docker build context path.
+      git-ref:
+        type: string
+        default: ""
+        description: The branch, tag or SHA to checkout. Leave empty for the current branch ref.
+      git-submodules:
+        type: boolean
+        default: false
+        description: Whether to also checkout Git submodules.
       push:
         type: boolean
         default: true
@@ -17,15 +33,30 @@ on:
         type: string
         description: Image name (repository path) within a registry.
         required: true
+      tag-branch:
+        type: boolean
+        default: false
+        description: Tag a successfully built image with the branch name.
+      tag-sha:
+        type: boolean
+        default: true
+        description: Tag a successfully built image with the commit SHA that triggered the workflow.
+      tag-pr:
+        type: boolean
+        default: true
+        description: Tag a successfully built image with reference to a Pull Request, e.g. pr-2.
       tag-latest:
         type: boolean
         default: false
         description: Tag a successfully built image with the tag latest.
+      tag-extra:
+        type: string
+        default: ""
+        description: Comma-separated list of additional image tags.
       registry-url:
         type: string
-        default: ${{ env.PLATTFORM_CONTAINER_REGISTRY }}
         description: URL to the container registry.
-        required: false
+        required: true
       runs-on:
         type: string
         default: "['self-hosted']"
@@ -50,7 +81,18 @@ on:
         type: string
         default: MEDIUM,HIGH,CRITICAL
         description: Comma-separated list of severities to consider an error.
+      trivy-summary-enabled:
+        type: boolean
+        default: false
+        description: Render a table of all the Trivy findings in the GitHub summary for the workflow.
+      trivy-sbom-enabled:
+        type: boolean
+        default: false
+        description: Generate an SBOM of your dependencies and submit them to GitHub Dependency Graph.
     secrets:
+      git-ssh-key:
+        description: SSH key used by Git to checkout the repository.
+        required: false
       registry-username:
         description: Username for the container registry.
         required: true
@@ -64,12 +106,18 @@ on:
       image-digest:
         description: The image digest for this build.
         value: ${{ jobs.build.outputs.image-digest }}
+      image-ref:
+        description: An image reference for this build (`<name>:<git-sha>@<digest>`).
+        value: ${{ jobs.build.outputs.image-ref }}
       image-ref-stripped:
-        description: An image reference for this build, stripped of its registry URL ("<name>:<sha>@<digest>").
-        value: ${{ jobs.push.outputs.image-ref-stripped }}
+        description: An image reference for this build, stripped of its registry URL (`<name>:<git-sha>@<digest>`).
+        value: ${{ jobs.build.outputs.image-ref-stripped }}
+      image-tags:
+        description: Comma-separated list of generated image tags for this build, (`<registry-url>/<name1>:<tag1>,<registry-url>/<name1>:<tag2>`).
+        value: ${{ jobs.build.outputs.image-tags }}
       image-tags-stripped:
-        description: Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (i.e. "<name1>:<tag1>,<name2>:<tag2>").
-        value: ${{ jobs.push.outputs.image-tags-stripped }}
+        description: Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (`<name1>:<tag1>,<name1>:<tag2>`).
+        value: ${{ jobs.build.outputs.image-tags-stripped }}
       unique-id:
         description: A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
         value: ${{ jobs.build.outputs.unique-id }}
@@ -99,23 +147,47 @@ jobs:
           fi
       -
         name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.git-ref }}
           token: ${{ secrets.token }}
+          submodules: ${{ inputs.git-submodules }}
+          ssh-key: ${{ secrets.git-ssh-key }}
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.3.0
       -
         if: steps.setup.outputs.docker_login == 'yes'
         name: Docker login
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3.2.0
         with:
-          registry: ${{ env.registry-url }}
+          registry: ${{ inputs.registry-url }}
           username: ${{ secrets.registry-username }}
           password: ${{ secrets.registry-password }}
       -
-        name: Build
-        id: docker-build
-        run: |
-          docker build --pull --file ${{ inputs.context }}/${{ inputs.dockerfile }} --tag ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }} ${{ inputs.context }}
-          docker save -o ./${{ steps.setup.outputs.unique-id }}-image.tar ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+        if: inputs.cache == false
+        name: Build (no cache)
+        uses: docker/build-push-action@v6.3.0
+        with:
+          file: ${{ inputs.context }}/${{ inputs.dockerfile }}
+          context: ${{ inputs.context }}
+          push: false
+          pull: true
+          tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          outputs: type=docker
+      -
+        if: inputs.cache == true
+        name: Build (with cache)
+        uses: docker/build-push-action@v6.3.0
+        with:
+          file: ${{ inputs.context }}/${{ inputs.dockerfile }}
+          context: ${{ inputs.context }}
+          push: false
+          pull: true
+          tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          outputs: type=docker
+          cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
+          cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
 
       #
       # Vulnerability scan
@@ -123,19 +195,54 @@ jobs:
 
       -
         name: Configure Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       -
+        if: inputs.trivy-enabled && inputs.trivy-summary-enabled
+        name: Scan for vulnerabilities (table format)
+        uses: aquasecurity/trivy-action@0.23.0
+        with:
+          exit-code: '0'
+          hide-progress: false
+          ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
+          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt
+          scanners: vuln,config
+          severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+          trivyignores: ${{ inputs.trivy-ignore-files }}
+          vuln-type: os,library
+      -
+        if: inputs.trivy-enabled && inputs.trivy-summary-enabled
+        name: Post all scan results to Github Summary as a table
+        env:
+          CODE_BLOCK: "```"
+        run: |
+          echo "# Trivy scan results" >> $GITHUB_STEP_SUMMARY
+
+          echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
+          cat ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt >> $GITHUB_STEP_SUMMARY
+          echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
+      -
+        if: inputs.trivy-sbom-enabled
+        name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
+        uses: aquasecurity/trivy-action@0.23.0
+        with:
+          format: github
+          hide-progress: false
+          output: 'dependency-results.sbom.json'
+          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          github-pat: ${{ secrets.GITHUB_TOKEN }}
+      -
         if: inputs.trivy-enabled
         name: Scan for vulnerabilities
-        uses: aquasecurity/trivy-action@0.10.0
+        uses: aquasecurity/trivy-action@0.23.0
         with:
           exit-code: '0'
           format: json
           hide-progress: false
           ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
-          input: ${{ steps.setup.outputs.unique-id }}-image.tar
+          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
           output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
           scanners: vuln,config
           severity: ${{ inputs.trivy-severity }}
@@ -186,26 +293,27 @@ jobs:
       #
 
       -
+        name: Build list of additional tags
+        id: additional-tags
+        uses: actions/github-script@v7.0.1
+        with:
+          script: |
+            core.setOutput('tags', `${{ inputs.tag-extra }}`.split(",").join("\n"))
+      -
         name: Generate image tags
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         id: meta
         with:
           images: |
-            ${{ env.registry-url }}/${{ inputs.name }}
+            ${{ inputs.registry-url }}/${{ inputs.name }}
           tags: |
-            type=ref,event=pr
-            type=raw,value=${{ github.sha }}
+            type=ref,event=pr,enable=${{ inputs.tag-pr }}
+            type=ref,event=branch,enable=${{ inputs.tag-branch }}
+            type=raw,value=${{ github.sha }},enable=${{ inputs.tag-sha }}
             type=raw,value=latest,enable=${{ inputs.tag-latest }}
+            ${{ steps.additional-tags.outputs.tags }}
       -
-        if: inputs.push
-        name: Docker login
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.registry-url }}
-          username: ${{ secrets.registry-username }}
-          password: ${{ secrets.registry-password }}
-      -
-        if: inputs.push
+        if: inputs.push && steps.setup.outputs.docker_login == 'yes'
         name: Push tags
         id: push
         run: |
@@ -215,6 +323,7 @@ jobs:
           export TAGS='${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}'
 
           digest=""
+          tags=""
           tags_stripped=""
           for tag in $TAGS
           do
@@ -224,17 +333,18 @@ jobs:
             # every iteration, as they are all the same.
             digest=$(docker push $tag | tee | grep -oP 'digest: \K(sha256:[0-9a-f]*)')
 
-            # Collect all tags, stripped of their secrets, so that the workflow
-            # is allowed to use them as output.
-            stripped=${tag#"${{ secrets.registry-url }}/"}
+            # Collect all tags, both stripped of the registry URL and not.
+            tags+="${tag},"
+            stripped=${tag#"${{ inputs.registry-url }}/"}
             tags_stripped+="${stripped},"
 
             # Add tag to summary output
-            echo "- \`<registry>/${stripped}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${tag}\`" >> $GITHUB_STEP_SUMMARY
           done
           echo >> $GITHUB_STEP_SUMMARY
 
           # Remove trailing comma before setting as output var
+          echo "image-tags=$(echo "$tags" | sed 's|,*$||')" >> $GITHUB_OUTPUT
           echo "image-tags-stripped=$(echo "$tags_stripped" | sed 's|,*$||')" >> $GITHUB_OUTPUT
           echo "image-digest=${digest}" >> $GITHUB_OUTPUT
 
@@ -243,7 +353,11 @@ jobs:
           echo >> $GITHUB_STEP_SUMMARY
 
           echo "### Image reference" >> $GITHUB_STEP_SUMMARY
-          echo "- \`<registry>/${{ inputs.name }}:${{ github.sha }}@${digest}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${digest}\`" >> $GITHUB_STEP_SUMMARY
     outputs:
+      image-digest: ${{ steps.push.outputs.image-digest }}
+      image-ref: ${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
       image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
+      image-tags: ${{ steps.push.outputs.image-tags }}
       image-tags-stripped: ${{ steps.push.outputs.image-tags-stripped }}
+      unique-id: ${{ steps.setup.outputs.unique-id }}
