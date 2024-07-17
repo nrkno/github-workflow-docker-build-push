@@ -1,0 +1,5 @@
+---
+remote: nrkno/nrk-bot-configs
+path: plattform/utvikleropplevelse/policy-bot/policy-bot.yaml
+ref: main
+
