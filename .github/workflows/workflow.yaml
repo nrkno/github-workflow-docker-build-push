@@ -212,6 +212,9 @@ jobs:
           severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
           trivyignores: ${{ inputs.trivy-ignore-files }}
           vuln-type: os,library
+        env:
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
       -
         if: inputs.trivy-enabled && inputs.trivy-summary-enabled
         name: Post all scan results to Github Summary as a table
@@ -233,6 +236,9 @@ jobs:
           output: 'dependency-results.sbom.json'
           image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
           github-pat: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
       -
         if: inputs.trivy-enabled
         name: Scan for vulnerabilities
@@ -248,6 +254,9 @@ jobs:
           severity: ${{ inputs.trivy-severity }}
           trivyignores: ${{ inputs.trivy-ignore-files }}
           vuln-type: os,library
+        env:
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
       -
         if: inputs.trivy-enabled
         name: Parse vulnerability scan results
