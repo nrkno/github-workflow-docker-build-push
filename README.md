@@ -33,6 +33,7 @@ jobs:
 - `git-submodules` (boolean, default `false`) - Whether to also checkout Git submodules.
 - `push` (boolean, default `true`) - Push a successfully built image to a registry.
 - `name` (string, **required**) - Image name (repository path) within a registry.
+- `ssh-agent` (boolean, default `false`) - Whether to start an SSH agent for the build.
 - `tag-branch` (boolean, default `false`) - Tag a successfully built image with the branch name.
 - `tag-sha` (boolean, default `true`) - Tag a successfully built image with the commit SHA that triggered the workflow.
 - `tag-pr` (boolean, default `true`) - Tag a successfully built image with reference to a Pull Request, e.g. pr-2.
@@ -53,6 +54,7 @@ jobs:
 - `registry-username` (**required**) - Username for the container registry.
 - `registry-password` (**required**) - Password for the container registry.
 - `token` (**required**) - GitHub auth token.
+- `ssh-deploy-key` - SSH key to load in the SSH agent
 
 ### Outputs
 - `image-digest` - The image digest for this build.

@@ -33,6 +33,10 @@ on:
         type: string
         description: Image name (repository path) within a registry.
         required: true
+      ssh-agent:
+        type: boolean
+        default: false
+        description: Whether to start an SSH agent for the build.
       tag-branch:
         type: boolean
         default: false
@@ -102,6 +106,9 @@ on:
       token:
         description: GitHub auth token.
         required: true
+      ssh-deploy-key:
+        description: SSH key to load in the SSH agent
+        required: false
     outputs:
       image-digest:
         description: The image digest for this build.
@@ -165,7 +172,13 @@ jobs:
           username: ${{ secrets.registry-username }}
           password: ${{ secrets.registry-password }}
       -
-        if: inputs.cache == false
+        if: ${{ inputs.ssh-agent }}
+        name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ssh-deploy-key }}
+      -
+        if: inputs.cache == false && !inputs.ssh-agent
         name: Build (no cache)
         uses: docker/build-push-action@v6.13.0
         with:
@@ -176,7 +189,7 @@ jobs:
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
           outputs: type=docker
       -
-        if: inputs.cache == true
+        if: inputs.cache == true && !inputs.ssh-agent
         name: Build (with cache)
         uses: docker/build-push-action@v6.13.0
         with:
@@ -188,6 +201,34 @@ jobs:
           outputs: type=docker
           cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
           cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
+      -
+        if: inputs.cache == false && inputs.ssh-agent
+        name: Build (no cache)
+        uses: docker/build-push-action@v6.13.0
+        with:
+          file: ${{ inputs.context }}/${{ inputs.dockerfile }}
+          context: ${{ inputs.context }}
+          push: false
+          pull: true
+          tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          outputs: type=docker
+          ssh: |
+            default=${{ env.SSH_AUTH_SOCK }}
+      -
+        if: inputs.cache == true && inputs.ssh-agent
+        name: Build (with cache)
+        uses: docker/build-push-action@v6.13.0
+        with:
+          file: ${{ inputs.context }}/${{ inputs.dockerfile }}
+          context: ${{ inputs.context }}
+          push: false
+          pull: true
+          tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          outputs: type=docker
+          cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
+          cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
+          ssh: |
+            default=${{ env.SSH_AUTH_SOCK }}
 
       #
       # Vulnerability scan
