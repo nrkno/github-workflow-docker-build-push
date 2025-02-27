@@ -180,7 +180,7 @@ jobs:
       -
         if: inputs.cache == false && !inputs.ssh-agent
         name: Build (no cache)
-        uses: docker/build-push-action@v6.14.0
+        uses: docker/build-push-action@v6.15.0
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
@@ -191,7 +191,7 @@ jobs:
       -
         if: inputs.cache == true && !inputs.ssh-agent
         name: Build (with cache)
-        uses: docker/build-push-action@v6.14.0
+        uses: docker/build-push-action@v6.15.0
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
@@ -204,7 +204,7 @@ jobs:
       -
         if: inputs.cache == false && inputs.ssh-agent
         name: Build (no cache)
-        uses: docker/build-push-action@v6.14.0
+        uses: docker/build-push-action@v6.15.0
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
@@ -217,7 +217,7 @@ jobs:
       -
         if: inputs.cache == true && inputs.ssh-agent
         name: Build (with cache)
-        uses: docker/build-push-action@v6.14.0
+        uses: docker/build-push-action@v6.15.0
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
