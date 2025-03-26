@@ -243,6 +243,7 @@ jobs:
       #
 
       -
+        if: inputs.trivy-enabled
         name: Configure Python
         uses: actions/setup-python@v5
         with:
