@@ -170,7 +170,7 @@ jobs:
       -
         if: steps.setup.outputs.docker_login == 'yes'
         name: Docker login
-        uses: docker/login-action@v3.5.0
+        uses: docker/login-action@v3.6.0
         with:
           registry: ${{ inputs.registry-url }}
           username: ${{ secrets.registry-username }}
