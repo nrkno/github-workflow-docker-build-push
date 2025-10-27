@@ -96,7 +96,11 @@ on:
       build-args:
         type: string
         default: ""
-        description: Newline separated list of build arguments to pass to the Docker build.  
+        description: Newline separated list of build arguments to pass to the Docker build.
+      secrets:
+        type: string
+        default: ""
+        description: secrets to use inside docker-build separated by newlines. ref: https://docs.docker.com/build/ci/github-actions/secrets/
     secrets:
       git-ssh-key:
         description: SSH key used by Git to checkout the repository.
@@ -192,6 +196,7 @@ jobs:
           pull: true
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
           build-args: ${{ inputs.build-args }}
+          secrets: ${{ inputs.secrets }}
           outputs: type=docker
       -
         if: inputs.cache == true && !inputs.ssh-agent
@@ -204,6 +209,7 @@ jobs:
           pull: true
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
           build-args: ${{ inputs.build-args }}
+          secrets: ${{ inputs.secrets }}
           outputs: type=docker
           cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
           cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
@@ -217,7 +223,8 @@ jobs:
           push: false
           pull: true
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          build-args: ${{ inputs.build-args }}          
+          build-args: ${{ inputs.build-args }}
+          secrets: ${{ inputs.secrets }}
           outputs: type=docker
           ssh: |
             default=${{ env.SSH_AUTH_SOCK }}
@@ -232,6 +239,7 @@ jobs:
           pull: true
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
           build-args: ${{ inputs.build-args }}
+          secrets: ${{ inputs.secrets }}
           outputs: type=docker
           cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
           cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
