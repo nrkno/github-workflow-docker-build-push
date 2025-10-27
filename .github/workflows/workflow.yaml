@@ -100,7 +100,7 @@ on:
       secrets:
         type: string
         default: ""
-        description: secrets to use inside docker-build separated by newlines. ref: https://docs.docker.com/build/ci/github-actions/secrets/
+        description: "secrets to use inside docker-build separated by newlines. ref: https://docs.docker.com/build/ci/github-actions/secrets/"
     secrets:
       git-ssh-key:
         description: SSH key used by Git to checkout the repository.
@@ -142,13 +142,11 @@ jobs:
     name: Build and push
     runs-on: ${{ fromJson(inputs.runs-on) }}
     steps:
-
       #
       # Build
       #
 
-      -
-        # A unique ID used to name artifacts produced.
+      - # A unique ID used to name artifacts produced.
         # At least on self-hosted runners, we seem to share the workspace directory
         # leading to race conditions if multiple instances of this workflow are
         # running in parallel within the same run.
@@ -160,33 +158,28 @@ jobs:
           then
             echo "docker_login=yes" >> $GITHUB_OUTPUT
           fi
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.git-ref }}
           token: ${{ secrets.token }}
           submodules: ${{ inputs.git-submodules }}
           ssh-key: ${{ secrets.git-ssh-key }}
-      -
-        name: Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3.11.1
-      -
-        if: steps.setup.outputs.docker_login == 'yes'
+      - if: steps.setup.outputs.docker_login == 'yes'
         name: Docker login
         uses: docker/login-action@v3.6.0
         with:
           registry: ${{ inputs.registry-url }}
           username: ${{ secrets.registry-username }}
           password: ${{ secrets.registry-password }}
-      -
-        if: ${{ inputs.ssh-agent }}
+      - if: ${{ inputs.ssh-agent }}
         name: Start SSH agent
         uses: webfactory/ssh-agent@v0.9.1
         with:
           ssh-private-key: ${{ secrets.ssh-deploy-key }}
-      -
-        if: inputs.cache == false && !inputs.ssh-agent
+      - if: inputs.cache == false && !inputs.ssh-agent
         name: Build (no cache)
         uses: docker/build-push-action@v6.18.0
         with:
@@ -198,8 +191,7 @@ jobs:
           build-args: ${{ inputs.build-args }}
           secrets: ${{ inputs.secrets }}
           outputs: type=docker
-      -
-        if: inputs.cache == true && !inputs.ssh-agent
+      - if: inputs.cache == true && !inputs.ssh-agent
         name: Build (with cache)
         uses: docker/build-push-action@v6.18.0
         with:
@@ -213,8 +205,7 @@ jobs:
           outputs: type=docker
           cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
           cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
-      -
-        if: inputs.cache == false && inputs.ssh-agent
+      - if: inputs.cache == false && inputs.ssh-agent
         name: Build (no cache)
         uses: docker/build-push-action@v6.18.0
         with:
@@ -228,8 +219,7 @@ jobs:
           outputs: type=docker
           ssh: |
             default=${{ env.SSH_AUTH_SOCK }}
-      -
-        if: inputs.cache == true && inputs.ssh-agent
+      - if: inputs.cache == true && inputs.ssh-agent
         name: Build (with cache)
         uses: docker/build-push-action@v6.18.0
         with:
@@ -250,17 +240,15 @@ jobs:
       # Vulnerability scan
       #
 
-      -
-        name: Configure Python
+      - name: Configure Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
-      -
-        if: inputs.trivy-enabled && inputs.trivy-summary-enabled
+          python-version: "3.11"
+      - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
         name: Scan for vulnerabilities (table format)
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          exit-code: '0'
+          exit-code: "0"
           hide-progress: false
           ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
           image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
@@ -272,8 +260,7 @@ jobs:
         env:
           TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
           TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
-      -
-        if: inputs.trivy-enabled && inputs.trivy-summary-enabled
+      - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
         name: Post all scan results to Github Summary as a table
         env:
           CODE_BLOCK: "```"
@@ -283,25 +270,23 @@ jobs:
           echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
           cat ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt >> $GITHUB_STEP_SUMMARY
           echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
-      -
-        if: inputs.trivy-sbom-enabled
+      - if: inputs.trivy-sbom-enabled
         name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
         uses: aquasecurity/trivy-action@0.33.1
         with:
           format: github
           hide-progress: false
-          output: 'dependency-results.sbom.json'
+          output: "dependency-results.sbom.json"
           image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
           github-pat: ${{ secrets.GITHUB_TOKEN }}
         env:
           TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
           TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
-      -
-        if: inputs.trivy-enabled
+      - if: inputs.trivy-enabled
         name: Scan for vulnerabilities
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          exit-code: '0'
+          exit-code: "0"
           format: json
           hide-progress: false
           ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
@@ -314,8 +299,7 @@ jobs:
         env:
           TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
           TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
-      -
-        if: inputs.trivy-enabled
+      - if: inputs.trivy-enabled
         name: Parse vulnerability scan results
         continue-on-error: ${{ inputs.trivy-error-is-success }}
         shell: python
@@ -348,8 +332,7 @@ jobs:
           print("Raw results:")
           json.dump(data, sys.stdout)
           sys.exit(exit_code)
-      -
-        if: inputs.trivy-enabled && inputs.trivy-error-is-success
+      - if: inputs.trivy-enabled && inputs.trivy-error-is-success
         name: Test results
         run: |
           test "x${{ steps.parse.outputs.exit-code }}" = "x2"
@@ -358,15 +341,13 @@ jobs:
       # Push
       #
 
-      -
-        name: Build list of additional tags
+      - name: Build list of additional tags
         id: additional-tags
         uses: actions/github-script@v8.0.0
         with:
           script: |
             core.setOutput('tags', `${{ inputs.tag-extra }}`.split(",").join("\n"))
-      -
-        name: Generate image tags
+      - name: Generate image tags
         uses: docker/metadata-action@v5
         id: meta
         with:
@@ -378,8 +359,7 @@ jobs:
             type=raw,value=${{ github.sha }},enable=${{ inputs.tag-sha }}
             type=raw,value=latest,enable=${{ inputs.tag-latest }}
             ${{ steps.additional-tags.outputs.tags }}
-      -
-        if: inputs.push && steps.setup.outputs.docker_login == 'yes'
+      - if: inputs.push && steps.setup.outputs.docker_login == 'yes'
         name: Push tags
         id: push
         run: |
