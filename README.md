@@ -49,6 +49,7 @@ jobs:
 - `trivy-summary-enabled` (boolean, default `false`) - Render a table of all the Trivy findings in the GitHub summary for the workflow.
 - `trivy-sbom-enabled` (boolean, default `false`) - Generate an SBOM of your dependencies and submit them to GitHub Dependency Graph.
 - `build-args` (string, default `""`) - Newline separated list of build arguments to pass to the Docker build.
+- `secrets` (string, default `""`) - secrets to use inside docker-build separated by newlines. ref: https://docs.docker.com/build/ci/github-actions/secrets/
 
 ### Secrets
 - `git-ssh-key` - SSH key used by Git to checkout the repository.
