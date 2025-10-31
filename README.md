@@ -57,6 +57,7 @@ jobs:
 - `registry-password` (**required**) - Password for the container registry.
 - `token` (**required**) - GitHub auth token.
 - `ssh-deploy-key` - SSH key to load in the SSH agent
+- `npm-token` - NPM authentication token for private packages
 
 ### Outputs
 - `image-digest` - The image digest for this build.

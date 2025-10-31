@@ -117,6 +117,9 @@ on:
       ssh-deploy-key:
         description: SSH key to load in the SSH agent
         required: false
+      npm-token:
+        description: NPM authentication token for private packages
+        required: false
     outputs:
       image-digest:
         description: The image digest for this build.
@@ -179,6 +182,35 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.1
         with:
           ssh-private-key: ${{ secrets.ssh-deploy-key }}
+      - name: Setup NPM secrets and build args
+        id: npm-setup
+        run: |
+          # Check if NPM token is provided
+          if [[ "${{ secrets.npm-token }}" != "" ]]; then
+            # Combine user-provided secrets with NPM token secret
+            if [[ "${{ inputs.secrets }}" != "" ]]; then
+              echo "combined-secrets<<EOF" >> $GITHUB_OUTPUT
+              echo "${{ inputs.secrets }}" >> $GITHUB_OUTPUT
+              echo "npmrc=//registry.npmjs.org/:_authToken=${{ secrets.npm-token }}" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            else
+              echo "combined-secrets=npmrc=//registry.npmjs.org/:_authToken=${{ secrets.npm-token }}" >> $GITHUB_OUTPUT
+            fi
+
+            # Combine user-provided build args with NPM token
+            if [[ "${{ inputs.build-args }}" != "" ]]; then
+              echo "combined-build-args<<EOF" >> $GITHUB_OUTPUT
+              echo "${{ inputs.build-args }}" >> $GITHUB_OUTPUT
+              echo "NPM_TOKEN=${{ secrets.npm-token }}" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            else
+              echo "combined-build-args=NPM_TOKEN=${{ secrets.npm-token }}" >> $GITHUB_OUTPUT
+            fi
+          else
+            # No NPM token, just pass through the original inputs
+            echo "combined-secrets=${{ inputs.secrets }}" >> $GITHUB_OUTPUT
+            echo "combined-build-args=${{ inputs.build-args }}" >> $GITHUB_OUTPUT
+          fi
       - if: inputs.cache == false && !inputs.ssh-agent
         name: Build (no cache)
         uses: docker/build-push-action@v6.18.0
@@ -188,8 +220,8 @@ jobs:
           push: false
           pull: true
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          build-args: ${{ inputs.build-args }}
-          secrets: ${{ inputs.secrets }}
+          build-args: ${{ steps.npm-setup.outputs.combined-build-args }}
+          secrets: ${{ steps.npm-setup.outputs.combined-secrets }}
           outputs: type=docker
       - if: inputs.cache == true && !inputs.ssh-agent
         name: Build (with cache)
@@ -200,8 +232,8 @@ jobs:
           push: false
           pull: true
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          build-args: ${{ inputs.build-args }}
-          secrets: ${{ inputs.secrets }}
+          build-args: ${{ steps.npm-setup.outputs.combined-build-args }}
+          secrets: ${{ steps.npm-setup.outputs.combined-secrets }}
           outputs: type=docker
           cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
           cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
@@ -214,8 +246,8 @@ jobs:
           push: false
           pull: true
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          build-args: ${{ inputs.build-args }}
-          secrets: ${{ inputs.secrets }}
+          build-args: ${{ steps.npm-setup.outputs.combined-build-args }}
+          secrets: ${{ steps.npm-setup.outputs.combined-secrets }}
           outputs: type=docker
           ssh: |
             default=${{ env.SSH_AUTH_SOCK }}
@@ -228,8 +260,8 @@ jobs:
           push: false
           pull: true
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          build-args: ${{ inputs.build-args }}
-          secrets: ${{ inputs.secrets }}
+          build-args: ${{ steps.npm-setup.outputs.combined-build-args }}
+          secrets: ${{ steps.npm-setup.outputs.combined-secrets }}
           outputs: type=docker
           cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
           cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
