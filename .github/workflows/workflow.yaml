@@ -213,7 +213,7 @@ jobs:
           fi
       - if: inputs.cache == false && !inputs.ssh-agent
         name: Build (no cache)
-        uses: docker/build-push-action@v6.19.1
+        uses: docker/build-push-action@v6.19.2
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
@@ -225,7 +225,7 @@ jobs:
           outputs: type=docker
       - if: inputs.cache == true && !inputs.ssh-agent
         name: Build (with cache)
-        uses: docker/build-push-action@v6.19.1
+        uses: docker/build-push-action@v6.19.2
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
@@ -239,7 +239,7 @@ jobs:
           cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
       - if: inputs.cache == false && inputs.ssh-agent
         name: Build (no cache)
-        uses: docker/build-push-action@v6.19.1
+        uses: docker/build-push-action@v6.19.2
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
@@ -253,7 +253,7 @@ jobs:
             default=${{ env.SSH_AUTH_SOCK }}
       - if: inputs.cache == true && inputs.ssh-agent
         name: Build (with cache)
-        uses: docker/build-push-action@v6.19.1
+        uses: docker/build-push-action@v6.19.2
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
