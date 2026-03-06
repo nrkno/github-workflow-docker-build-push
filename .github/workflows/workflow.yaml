@@ -380,7 +380,7 @@ jobs:
           script: |
             core.setOutput('tags', `${{ inputs.tag-extra }}`.split(",").join("\n"))
       - name: Generate image tags
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         id: meta
         with:
           images: |
