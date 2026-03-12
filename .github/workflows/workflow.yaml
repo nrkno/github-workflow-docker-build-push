@@ -179,7 +179,7 @@ jobs:
           password: ${{ secrets.registry-password }}
       - if: ${{ inputs.ssh-agent }}
         name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.9.1
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.ssh-deploy-key }}
       - name: Setup NPM secrets and build args
