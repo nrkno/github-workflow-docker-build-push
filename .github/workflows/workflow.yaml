@@ -272,102 +272,102 @@ jobs:
       # Vulnerability scan
       #
 
-      - name: Configure Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-      - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
-        name: Scan for vulnerabilities (table format)
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          exit-code: "0"
-          hide-progress: false
-          ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
-          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt
-          scanners: vuln,config
-          severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
-          trivyignores: ${{ inputs.trivy-ignore-files }}
-          vuln-type: os,library
-        env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
-          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
-      - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
-        name: Post all scan results to Github Summary as a table
-        env:
-          CODE_BLOCK: "```"
-        run: |
-          echo "# Trivy scan results" >> $GITHUB_STEP_SUMMARY
+      # - name: Configure Python
+      #   uses: actions/setup-python@v6
+      #   with:
+      #     python-version: "3.11"
+      # - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
+      #   name: Scan for vulnerabilities (table format)
+      #   uses: aquasecurity/trivy-action@0.35.0
+      #   with:
+      #     exit-code: "0"
+      #     hide-progress: false
+      #     ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
+      #     image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+      #     output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt
+      #     scanners: vuln,config
+      #     severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+      #     trivyignores: ${{ inputs.trivy-ignore-files }}
+      #     vuln-type: os,library
+      #   env:
+      #     TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+      #     TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
+      # - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
+      #   name: Post all scan results to Github Summary as a table
+      #   env:
+      #     CODE_BLOCK: "```"
+      #   run: |
+      #     echo "# Trivy scan results" >> $GITHUB_STEP_SUMMARY
 
-          echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
-          cat ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt >> $GITHUB_STEP_SUMMARY
-          echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
-      - if: inputs.trivy-sbom-enabled
-        name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          format: github
-          hide-progress: false
-          output: "dependency-results.sbom.json"
-          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          github-pat: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
-          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
-      - if: inputs.trivy-enabled
-        name: Scan for vulnerabilities
-        uses: aquasecurity/trivy-action@0.35.0
-        with:
-          exit-code: "0"
-          format: json
-          hide-progress: false
-          ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
-          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
-          scanners: vuln,config
-          severity: ${{ inputs.trivy-severity }}
-          trivyignores: ${{ inputs.trivy-ignore-files }}
-          vuln-type: os,library
-        env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
-          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
-      - if: inputs.trivy-enabled
-        name: Parse vulnerability scan results
-        continue-on-error: ${{ inputs.trivy-error-is-success }}
-        shell: python
-        env:
-          RESULT_FILENAME: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
-        id: parse
-        run: |
-          import json
-          import os
-          import sys
+      #     echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
+      #     cat ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt >> $GITHUB_STEP_SUMMARY
+      #     echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
+      # - if: inputs.trivy-sbom-enabled
+      #   name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
+      #   uses: aquasecurity/trivy-action@0.35.0
+      #   with:
+      #     format: github
+      #     hide-progress: false
+      #     output: "dependency-results.sbom.json"
+      #     image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+      #     github-pat: ${{ secrets.GITHUB_TOKEN }}
+      #   env:
+      #     TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+      #     TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
+      # - if: inputs.trivy-enabled
+      #   name: Scan for vulnerabilities
+      #   uses: aquasecurity/trivy-action@0.35.0
+      #   with:
+      #     exit-code: "0"
+      #     format: json
+      #     hide-progress: false
+      #     ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
+      #     image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+      #     output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
+      #     scanners: vuln,config
+      #     severity: ${{ inputs.trivy-severity }}
+      #     trivyignores: ${{ inputs.trivy-ignore-files }}
+      #     vuln-type: os,library
+      #   env:
+      #     TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+      #     TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
+      # - if: inputs.trivy-enabled
+      #   name: Parse vulnerability scan results
+      #   continue-on-error: ${{ inputs.trivy-error-is-success }}
+      #   shell: python
+      #   env:
+      #     RESULT_FILENAME: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
+      #   id: parse
+      #   run: |
+      #     import json
+      #     import os
+      #     import sys
 
-          with open(os.getenv("RESULT_FILENAME"), "r") as f:
-              data = json.load(f)
+      #     with open(os.getenv("RESULT_FILENAME"), "r") as f:
+      #         data = json.load(f)
 
-          exit_code = 0
-          for result in data.get("Results", []):
-              for vuln in result.get("Vulnerabilities", []):
-                  # Severity to report to GitHub
-                  sev = "error" if vuln.get("Severity") in ("HIGH", "CRITICAL") else "warning"
-                  msg = f"{vuln.get('Severity')} {vuln.get('VulnerabilityID')} {vuln.get('PkgName')}: {vuln.get('Title')} ({vuln.get('PrimaryURL')})"
-                  print(f"::{sev} ::{msg}")
+      #     exit_code = 0
+      #     for result in data.get("Results", []):
+      #         for vuln in result.get("Vulnerabilities", []):
+      #             # Severity to report to GitHub
+      #             sev = "error" if vuln.get("Severity") in ("HIGH", "CRITICAL") else "warning"
+      #             msg = f"{vuln.get('Severity')} {vuln.get('VulnerabilityID')} {vuln.get('PkgName')}: {vuln.get('Title')} ({vuln.get('PrimaryURL')})"
+      #             print(f"::{sev} ::{msg}")
 
-                  # Since severity filter is set at job level, we can exit non-zero for all
-                  # issues regardless of severity and let workflow consumers decide which
-                  # severity levels to care about.
-                  exit_code = 2
+      #             # Since severity filter is set at job level, we can exit non-zero for all
+      #             # issues regardless of severity and let workflow consumers decide which
+      #             # severity levels to care about.
+      #             exit_code = 2
 
-          with open(os.getenv("GITHUB_OUTPUT"), 'a') as f:
-            print(f"exit-code={exit_code}", file=f)
-          print("Raw results:")
-          json.dump(data, sys.stdout)
-          sys.exit(exit_code)
-      - if: inputs.trivy-enabled && inputs.trivy-error-is-success
-        name: Test results
-        run: |
-          test "x${{ steps.parse.outputs.exit-code }}" = "x2"
+      #     with open(os.getenv("GITHUB_OUTPUT"), 'a') as f:
+      #       print(f"exit-code={exit_code}", file=f)
+      #     print("Raw results:")
+      #     json.dump(data, sys.stdout)
+      #     sys.exit(exit_code)
+      # - if: inputs.trivy-enabled && inputs.trivy-error-is-success
+      #   name: Test results
+      #   run: |
+      #     test "x${{ steps.parse.outputs.exit-code }}" = "x2"
 
       #
       # Push
