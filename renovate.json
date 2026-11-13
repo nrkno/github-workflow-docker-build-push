@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    "mergeConfidence:all-badges"
+  ],
+  "timezone": "Europe/Oslo",
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "rangeStrategy": "pin",
+  "labels": ["dependencies"],
+  "schedule": ["after 8am and before 4pm every weekday"],
+  "packageRules": [
+    {
+      "description": "Action bumps change what consumers execute, so they must release a patch (fix) and appear in the release notes.",
+      "matchManagers": ["github-actions"],
+      "commitMessagePrefix": "fix(deps):",
+      "semanticCommits": "disabled"
+    },
+    {
+      "description": "Test fixture images are not shipped to consumers.",
+      "matchManagers": ["dockerfile"],
+      "commitMessagePrefix": "chore(deps):",
+      "semanticCommits": "disabled"
+    },
+    {
+      "matchUpdateTypes": ["digest", "pin", "pinDigest", "replacement"],
+      "addLabels": ["digest"]
+    }
+  ],
+  "gitIgnoredAuthors": ["terraform-consumer[bot]", "bulldozer[bot]"]
+}
