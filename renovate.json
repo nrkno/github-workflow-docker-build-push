@@ -59,6 +59,18 @@
       "addLabels": [
         "digest"
       ]
+    },
+    {
+      "description": "Step-level actions keep full semver tags: .github/workflows/actions.lock records and enforces the SHAs, so Renovate must not pin digests here (overrides the preset's pinGitHubActionDigests).",
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["action"],
+      "pinDigests": false
+    },
+    {
+      "description": "Reusable workflow calls (jobs.<job_id>.uses) are not covered by the lockfile: keep them pinned to a full commit SHA with a version comment.",
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["workflow"],
+      "pinDigests": true
     }
   ],
   "gitIgnoredAuthors": [
