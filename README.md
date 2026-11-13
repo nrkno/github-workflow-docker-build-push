@@ -5,10 +5,13 @@ a container registry.
 
 ## Usage
 
+Pin the workflow by full commit SHA (replace `<sha>` and the version comment
+with the latest release). Version tags are mutable.
+
 ```yaml
 jobs:
   build-push:
-    uses: nrkno/github-workflow-docker-build-push/.github/workflows/workflow.yaml@v4.0.0
+    uses: nrkno/github-workflow-docker-build-push/.github/workflows/workflow.yaml@<sha> # v4.x.y
     with:
       runs-on: "['self-hosted', 'linux']"
       registry-url: myregistry.azurecr.io
@@ -57,7 +60,7 @@ jobs:
 - `registry-password` (**required**) - Password for the container registry.
 - `token` (**required**) - GitHub auth token.
 - `ssh-deploy-key` - SSH key to load in the SSH agent
-- `npm-token` - NPM authentication token for private packages
+- `npm-token` - NPM authentication token for private packages. Exposed to the build only as BuildKit secrets `npmrc` and `npm_token`, never as a build-arg.
 
 ### Outputs
 - `image-digest` - The image digest for this build.
@@ -67,6 +70,42 @@ jobs:
 - `image-tags-stripped` - Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (`<name1>:<tag1>,<name1>:<tag2>`).
 - `unique-id` - A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
 <!-- autodoc end -->
+
+## NPM token and build secrets
+
+The `npm-token` secret is passed to the build as **BuildKit secrets**, never as
+a build-arg (build-args are recorded in image history). Two secret ids are
+provided:
+
+- `npmrc` - a ready-made `.npmrc` line: `//registry.npmjs.org/:_authToken=<token>`
+- `npm_token` - the bare token
+
+Dockerfiles must read it in the `RUN` step that needs it:
+
+```dockerfile
+# Option 1: use the ready-made .npmrc
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci
+
+# Option 2: read the bare token
+RUN --mount=type=secret,id=npm_token \
+    NPM_TOKEN="$(cat /run/secrets/npm_token)" npm ci
+```
+
+**Breaking change for Dockerfiles using `ARG NPM_TOKEN`:** the workflow no
+longer injects an `NPM_TOKEN` build-arg, so such an `ARG` is now empty. Switch
+to one of the secret mounts above. Rotate any npm token that was previously
+passed this way, because it may be readable in published image history.
+
+Secrets given in the `secrets` input are string inputs and are not masked by
+GitHub. Do not put real secret values there; prefer the `npm-token` secret.
+
+## Vulnerability scanning
+
+When `trivy-enabled` is `true` (the default), the built image is scanned with
+`aquasecurity/trivy-action`, pinned by commit SHA to the immutable `v0.36.0`
+release, with Trivy `v0.70.0`. Findings fail the job unless
+`trivy-error-is-success` is set. The layer cache is written only from the
+repository's default branch.
 
 ## Implementation notes
 
