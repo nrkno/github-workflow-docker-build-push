@@ -11,15 +11,22 @@ permissions: {}
 jobs:
   autodoc:
     name: Update workflow documentation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Fork PRs get a read-only token and cannot be pushed to.
     if: github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: write
     steps:
-      # The script that runs is always taken from the base branch. The pull
-      # request head is only ever read as data (workflow.yaml and README.md)
-      # and committed to, never executed.
+      # Trust model: pull request content (checked out under `head/`) is DATA
+      # ONLY. Nothing from it is executed or imported, and no credential is
+      # present in the checkout while it is processed.
+      #
+      # - Python is always started with `-I` (isolated mode: no CWD, script
+      #   directory or PYTHON* variables on sys.path), and never from inside
+      #   `head/`. `python -m pip` from a directory the PR controls would import
+      #   a PR-supplied `pip/__main__.py`.
+      # - The script comes from the trusted base commit.
+      # - The write token is only exposed to the final, explicit push step.
       - name: Checkout trusted base
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,26 +39,50 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           path: head
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
       - name: Configure Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
+      - name: Install dependencies
+        # Runs in the workspace root, which holds only `base/` and `head/`.
+        run: python -I -m pip install pyyaml==6.0.3
       - name: Update documentation
-        working-directory: head
+        id: docs
         run: |
-          python -m pip install pyyaml==6.0.3
-          python ../base/.github/scripts/autodoc.py .github/workflows/workflow.yaml README.md
+          # The PR could replace the inputs with symlinks to other files.
+          for f in head/.github/workflows/workflow.yaml head/README.md
+          do
+            if [[ -L "$f" || ! -f "$f" ]]
+            then
+              echo "::error::$f must be a regular file"
+              exit 1
+            fi
+          done
+
+          python -I base/.github/scripts/autodoc.py head/.github/workflows/workflow.yaml head/README.md
 
           # Exit early if no changes were made
-          if [[ -z "$(git status --porcelain README.md)" ]]
+          if [[ -z "$(git -C head status --porcelain README.md)" ]]
           then
             echo "Nothing to do!"
             exit 0
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git -c core.hooksPath=/dev/null commit -m "docs: update readme with autodoc"
-          git -c core.hooksPath=/dev/null push
+          git -C head config user.name "github-actions[bot]"
+          git -C head config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C head add README.md
+          git -C head -c core.hooksPath=/dev/null commit -m "docs: update readme with autodoc"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - if: steps.docs.outputs.changed == 'true'
+        name: Push documentation update
+        # The only step that sees the write token. It runs git and nothing else.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git -C head -c core.hooksPath=/dev/null \
+            -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
+            push origin "HEAD:refs/heads/${HEAD_REF}"
