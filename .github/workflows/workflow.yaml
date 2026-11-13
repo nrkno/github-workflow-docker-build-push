@@ -168,8 +168,17 @@ jobs:
         env:
           GIT_SHA: ${{ github.sha }}
           REGISTRY_USERNAME: ${{ secrets.registry-username }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           echo "unique-id=$(date +%Y-%m-%d)-${GIT_SHA}-$(openssl rand -hex 20)" >> "$GITHUB_OUTPUT"
+          # Pull requests build (and scan) to test compatibility, but must never
+          # publish anything, whatever the caller passed in `push`. The event is
+          # the caller's, so this cannot be overridden by an input.
+          if [[ "${EVENT_NAME}" == "pull_request" || "${EVENT_NAME}" == "pull_request_target" ]]
+          then
+            echo "is-pr=yes" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pull request event: the image is built but never pushed or submitted."
+          fi
           if [[ "${REGISTRY_USERNAME}" != "" ]]
           then
             echo "docker_login=yes" >> "$GITHUB_OUTPUT"
@@ -221,8 +230,9 @@ jobs:
           # Only the default branch may write the shared layer cache, so that
           # branch and PR builds cannot seed layers that later releases reuse.
           # Scheduled runs always execute on the default branch, and their event
-          # payload has no `repository.default_branch`.
-          cache-to: ${{ inputs.cache && (github.event_name == 'schedule' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && format('type=registry,ref={0}/{1}:{2},mode=max,ignore-error=true', inputs.registry-url, inputs.name, inputs.cache-tag) || '' }}
+          # payload has no `repository.default_branch`. `pull_request_target`
+          # runs with the base branch as `github.ref`, so it is excluded by event.
+          cache-to: ${{ inputs.cache && steps.setup.outputs.is-pr != 'yes' && (github.event_name == 'schedule' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && format('type=registry,ref={0}/{1}:{2},mode=max,ignore-error=true', inputs.registry-url, inputs.name, inputs.cache-tag) || '' }}
           ssh: ${{ inputs.ssh-agent && format('default={0}', env.SSH_AUTH_SOCK) || '' }}
 
       #
@@ -269,7 +279,7 @@ jobs:
           echo "$CODE_BLOCK" >> "$GITHUB_STEP_SUMMARY"
           cat "$RESULT_FILENAME" >> "$GITHUB_STEP_SUMMARY"
           echo "$CODE_BLOCK" >> "$GITHUB_STEP_SUMMARY"
-      - if: inputs.trivy-enabled && inputs.trivy-sbom-enabled
+      - if: inputs.trivy-enabled && inputs.trivy-sbom-enabled && steps.setup.outputs.is-pr != 'yes'
         name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -373,7 +383,7 @@ jobs:
             type=raw,value=${{ github.sha }},enable=${{ inputs.tag-sha }}
             type=raw,value=latest,enable=${{ inputs.tag-latest }}
             ${{ steps.additional-tags.outputs.tags }}
-      - if: inputs.push && steps.setup.outputs.docker_login == 'yes'
+      - if: inputs.push && steps.setup.outputs.is-pr != 'yes' && steps.setup.outputs.docker_login == 'yes'
         name: Push tags
         id: push
         env:

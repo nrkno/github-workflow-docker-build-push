@@ -11,6 +11,8 @@ on:
 permissions:
   contents: read
 
+# These jobs never push: `push: false`, no registry credentials, and the reusable
+# workflow additionally refuses to push on pull_request events.
 jobs:
   image-ok:
     uses: ./.github/workflows/workflow.yaml
