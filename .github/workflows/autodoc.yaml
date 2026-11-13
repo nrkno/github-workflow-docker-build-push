@@ -50,12 +50,15 @@ jobs:
       - name: Update documentation
         id: docs
         run: |
-          # The PR could replace the inputs with symlinks to other files.
-          for f in head/.github/workflows/workflow.yaml head/README.md
+          # The PR could replace the inputs, or a directory on their path such
+          # as `.github`, with symlinks that point outside the checkout. Each
+          # path must resolve to exactly itself under the real `head/`.
+          head_real="$(realpath head)"
+          for f in .github/workflows/workflow.yaml README.md
           do
-            if [[ -L "$f" || ! -f "$f" ]]
+            if [[ ! -f "head/$f" || "$(realpath -e "head/$f")" != "${head_real}/$f" ]]
             then
-              echo "::error::$f must be a regular file"
+              echo "::error::$f must be a regular file with no symlinked path component"
               exit 1
             fi
           done
