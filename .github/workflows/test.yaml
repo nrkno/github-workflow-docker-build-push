@@ -15,7 +15,7 @@ jobs:
   image-ok:
     uses: ./.github/workflows/workflow.yaml
     with:
-      runs-on: "['ubuntu-latest']"
+      runs-on: "['ubuntu-24.04']"
       registry-url: cr.example.com
       name: test
       context: ./test/image-ok
@@ -28,7 +28,7 @@ jobs:
   image-vulnerable:
     uses: ./.github/workflows/workflow.yaml
     with:
-      runs-on: "['ubuntu-latest']"
+      runs-on: "['ubuntu-24.04']"
       registry-url: cr.example.com
       name: test
       context: ./test/image-vulnerable
@@ -42,7 +42,7 @@ jobs:
   image-with-extra-tags:
     uses: ./.github/workflows/workflow.yaml
     with:
-      runs-on: "['ubuntu-latest']"
+      runs-on: "['ubuntu-24.04']"
       registry-url: cr.example.com
       name: test
       context: ./test/image-ok
