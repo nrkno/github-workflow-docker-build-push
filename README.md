@@ -5,6 +5,11 @@ a container registry.
 
 ## Usage
 
+Set `permissions: contents: read` on the calling job. The workflow declares no
+permissions of its own, so it runs with the caller's `GITHUB_TOKEN`. A token
+passed as the `token` or `registry-password` secret keeps the caller's
+permissions (for example `packages: write` when pushing to ghcr.io).
+
 Pin the workflow by full commit SHA (replace `<sha>` and the version comment
 with the latest release). Version tags are mutable.
 

@@ -140,10 +140,12 @@ on:
         description: A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
         value: ${{ jobs.build.outputs.unique-id }}
 
-# Least privilege: nothing here needs more than reading the caller's repository.
-# Registry, SSH and npm access use the dedicated secrets, not GITHUB_TOKEN.
-permissions:
-  contents: read
+# No top-level `permissions:` on purpose. A called workflow can only keep or
+# reduce the caller's GITHUB_TOKEN permissions, and requesting a permission the
+# caller does not grant (e.g. `contents: read` for a caller with only
+# `packages: write`) stops the run from starting. This workflow does not need
+# its own token: checkout, registry and npm access use the secrets passed by
+# the caller. Callers should set `permissions: contents: read` on the calling job.
 
 jobs:
   build:
@@ -218,7 +220,9 @@ jobs:
           cache-from: ${{ inputs.cache && format('type=registry,ref={0}/{1}:{2}', inputs.registry-url, inputs.name, inputs.cache-tag) || '' }}
           # Only the default branch may write the shared layer cache, so that
           # branch and PR builds cannot seed layers that later releases reuse.
-          cache-to: ${{ inputs.cache && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && format('type=registry,ref={0}/{1}:{2},mode=max,ignore-error=true', inputs.registry-url, inputs.name, inputs.cache-tag) || '' }}
+          # Scheduled runs always execute on the default branch, and their event
+          # payload has no `repository.default_branch`.
+          cache-to: ${{ inputs.cache && (github.event_name == 'schedule' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && format('type=registry,ref={0}/{1}:{2},mode=max,ignore-error=true', inputs.registry-url, inputs.name, inputs.cache-tag) || '' }}
           ssh: ${{ inputs.ssh-agent && format('default={0}', env.SSH_AUTH_SOCK) || '' }}
 
       #
