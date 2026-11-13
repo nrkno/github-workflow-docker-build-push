@@ -10,13 +10,19 @@ permissions of its own, so it runs with the caller's `GITHUB_TOKEN`. A token
 passed as the `token` or `registry-password` secret keeps the caller's
 permissions (for example `packages: write` when pushing to ghcr.io).
 
+Pull requests never publish. On `pull_request` and `pull_request_target` events
+the image is built (to test that it builds) and may be scanned, but it is never
+pushed to a registry, no layer cache is written, and no SBOM is submitted,
+whatever the `push` input says. The `image-digest` and `image-tags` outputs are
+empty for these events.
+
 Pin the workflow by full commit SHA (replace `<sha>` and the version comment
 with the latest release). Version tags are mutable.
 
 ```yaml
 jobs:
   build-push:
-    uses: nrkno/github-workflow-docker-build-push/.github/workflows/workflow.yaml@<sha> # v4.x.y
+    uses: nrkno/github-workflow-docker-build-push/.github/workflows/workflow.yaml@<sha> # v5.x.y
     with:
       runs-on: "['self-hosted', 'linux']"
       registry-url: myregistry.azurecr.io
@@ -108,9 +114,38 @@ GitHub. Do not put real secret values there; prefer the `npm-token` secret.
 
 When `trivy-enabled` is `true` (the default), the built image is scanned with
 `aquasecurity/trivy-action`, pinned by commit SHA to the immutable `v0.36.0`
-release, with Trivy `v0.70.0`. Findings fail the job unless
-`trivy-error-is-success` is set. The layer cache is written only from the
+release, with Trivy `v0.70.0`. Findings fail the job, so
+nothing is pushed, unless `trivy-error-is-success` is set. The layer cache is written only from the
 repository's default branch.
+
+When `trivy-sbom-enabled` is `true`, the SBOM is submitted to the Dependency
+Graph with the `token` secret. A caller that passes `secrets.GITHUB_TOKEN` as
+`token` must grant `contents: write` on the calling job; `contents: read` is not
+enough. SBOMs are not submitted for pull requests.
+
+## Migrating from v4 to v5
+
+v5 has three breaking changes.
+
+1. **The `NPM_TOKEN` build-arg is gone.** The npm token is now only available
+   as BuildKit secrets (see above). In every Dockerfile that has
+   `ARG NPM_TOKEN`:
+   1. Delete the `ARG NPM_TOKEN` (and any `ENV` that copies it).
+   2. In the `RUN` step that installs packages, mount the secret:
+      `RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci`
+   3. Rotate npm tokens that were passed as a build-arg: they may be readable
+      in the history of images already published.
+2. **Scan findings now block the push.** v4.6 skipped scanning without saying
+   so. Images with fixable MEDIUM, HIGH or CRITICAL findings now fail the job
+   before anything is pushed. Fix the findings, add a Trivy ignore file
+   (`trivy-ignore-files`), narrow `trivy-severity`, or set `trivy-enabled: false`
+   or `trivy-error-is-success: true` knowingly.
+3. **Pull requests never push.** Callers that relied on `pr-<n>` images being
+   pushed from `pull_request` events must build and push from a branch or
+   `push` event instead.
+
+Pin by SHA, or use the floating tags `v5` and `v5.<minor>`, which are moved on
+each release. `v4` stays on the last v4 release and receives no further updates.
 
 ## Implementation notes
 
