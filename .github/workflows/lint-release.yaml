@@ -2,8 +2,14 @@
 on: [push, pull_request]
 
 name: Commit lint and release
+
+# The reusable workflow's jobs request these permissions; callers must grant them.
+permissions:
+  contents: write
+  pull-requests: read
+
 jobs:
   lint_release:
-    uses: nrkno/github-workflow-semantic-release/.github/workflows/workflow.yaml@v4
+    uses: nrkno/github-workflow-semantic-release/.github/workflows/workflow.yaml@6a8585e39eabcb53cdbdebfcc76eb9672199089e # v5.1.5
     with:
       runs-on: ubuntu-latest
