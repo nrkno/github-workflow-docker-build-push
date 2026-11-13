@@ -23,6 +23,17 @@
       "allowedVersions": "!/^v0\\.69\\.[456]$/"
     },
     {
+      "description": "The Trivy version sets what consumers' scans run, so its bumps must release a patch (fix).",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "aquasecurity/trivy"
+      ],
+      "commitMessagePrefix": "fix(deps):",
+      "semanticCommits": "disabled"
+    },
+    {
       "description": "Action bumps change what consumers execute, so they must release a patch (fix) and appear in the release notes.",
       "matchManagers": [
         "github-actions"
