@@ -210,4 +210,8 @@ Reusable workflow calls (`jobs.<job_id>.uses`) are not covered by the lockfile.
 Keep them pinned to a full commit SHA with a `# vX.Y.Z` comment.
 The `Actions lockfile` workflow runs `gh actions-lock --verify-local` on PRs that
 touch `.github/workflows/` and fails if an action reference has no lockfile
-entry. Do not edit the lockfile by hand.
+entry. This offline check does not verify where the pinned commits came from.
+An advisory step runs the read-only `gh actions-lock --verify --no-interactive`
+against the GitHub API to verify the pins. Review any findings before merging;
+the online step reports findings without failing the job. Do not edit the
+lockfile by hand.

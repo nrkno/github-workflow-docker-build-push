@@ -27,3 +27,10 @@ jobs:
       - name: Verify lockfile covers every action reference
         # If this fails, run `gh actions-lock` locally and commit .github/workflows/actions.lock.
         run: gh actions-lock --verify-local
+      - name: Check lockfile provenance (advisory)
+        # Keep API failures from changing the existing offline coverage check.
+        continue-on-error: true
+        timeout-minutes: 3
+        run: gh actions-lock --verify --no-interactive
+        env:
+          GH_TOKEN: ${{ github.token }}
