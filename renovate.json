@@ -1,0 +1,95 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    "mergeConfidence:all-badges"
+  ],
+  "timezone": "Europe/Oslo",
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "rangeStrategy": "pin",
+  "labels": [
+    "dependencies"
+  ],
+  "schedule": [
+    "after 8am and before 4pm every weekday"
+  ],
+  "packageRules": [
+    {
+      "description": "Trivy v0.69.4 - v0.69.6 were malicious (GHSA-69fq-xp46-6x23); never propose them.",
+      "matchDepNames": [
+        "aquasecurity/trivy"
+      ],
+      "allowedVersions": "!/^v0\\.69\\.[456]$/"
+    },
+    {
+      "description": "The Trivy version sets what consumers' scans run, so its bumps must release a patch (fix).",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "aquasecurity/trivy"
+      ],
+      "commitMessagePrefix": "fix(deps):",
+      "semanticCommits": "disabled"
+    },
+    {
+      "description": "Action bumps change what consumers execute, so they must release a patch (fix) and appear in the release notes.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "commitMessagePrefix": "fix(deps):",
+      "semanticCommits": "disabled"
+    },
+    {
+      "description": "Test fixture images are not shipped to consumers.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "commitMessagePrefix": "chore(deps):",
+      "semanticCommits": "disabled"
+    },
+    {
+      "matchUpdateTypes": [
+        "digest",
+        "pin",
+        "pinDigest",
+        "replacement"
+      ],
+      "addLabels": [
+        "digest"
+      ]
+    },
+    {
+      "description": "Step-level actions keep full semver tags: .github/workflows/actions.lock records and enforces the SHAs, so Renovate must not pin digests here (overrides the preset's pinGitHubActionDigests).",
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["action"],
+      "pinDigests": false
+    },
+    {
+      "description": "Reusable workflow calls (jobs.<job_id>.uses) are not covered by the lockfile: keep them pinned to a full commit SHA with a version comment.",
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["workflow"],
+      "pinDigests": true
+    }
+  ],
+  "gitIgnoredAuthors": [
+    "terraform-consumer[bot]",
+    "bulldozer[bot]"
+  ],
+  "customManagers": [
+    {
+      "description": "Trivy binary version passed to aquasecurity/trivy-action via `version:`.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/workflow\\.yaml$/"
+      ],
+      "matchStrings": [
+        "aquasecurity/trivy-action@\\S+[^\\n]*\\n(?:[ \\t]+[^\\n]*\\n)*?[ \\t]+version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "aquasecurity/trivy",
+      "extractVersionTemplate": "^(?<version>v.+)$"
+    }
+  ]
+}

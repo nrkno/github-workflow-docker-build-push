@@ -8,14 +8,32 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
+  publication-guard:
+    name: Check publication decisions
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: test/publication-guard
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+
+  # The image fixtures run without registry credentials, cache, or image push.
   image-ok:
     uses: ./.github/workflows/workflow.yaml
     with:
-      runs-on: "['ubuntu-latest']"
-      registry-url: cr.example.com
+      runs-on: "['ubuntu-24.04']"
+      registry-url: registry.example.invalid
       name: test
       context: ./test/image-ok
+      cache: false
       push: false
     secrets:
       registry-username: ""
@@ -25,10 +43,11 @@ jobs:
   image-vulnerable:
     uses: ./.github/workflows/workflow.yaml
     with:
-      runs-on: "['ubuntu-latest']"
-      registry-url: cr.example.com
+      runs-on: "['ubuntu-24.04']"
+      registry-url: registry.example.invalid
       name: test
       context: ./test/image-vulnerable
+      cache: false
       push: false
       trivy-error-is-success: true
     secrets:
@@ -39,13 +58,42 @@ jobs:
   image-with-extra-tags:
     uses: ./.github/workflows/workflow.yaml
     with:
-      runs-on: "['ubuntu-latest']"
-      registry-url: cr.example.com
+      runs-on: "['ubuntu-24.04']"
+      registry-url: registry.example.invalid
       name: test
       context: ./test/image-ok
+      cache: false
       push: false
       tag-extra: foo,bar,baz
     secrets:
       registry-username: ""
       registry-password: ""
       token: ${{ secrets.GITHUB_TOKEN }}
+
+  no-publication-outputs:
+    # This caller only checks outputs. The synthetic job tests the PR guard.
+    name: Check outputs when no image was pushed
+    needs: image-ok
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Check reusable workflow outputs
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ needs.image-ok.outputs.image-digest }}
+          IMAGE_REF: ${{ needs.image-ok.outputs.image-ref }}
+          IMAGE_REF_STRIPPED: ${{ needs.image-ok.outputs.image-ref-stripped }}
+          IMAGE_TAGS: ${{ needs.image-ok.outputs.image-tags }}
+          IMAGE_TAGS_STRIPPED: ${{ needs.image-ok.outputs.image-tags-stripped }}
+          UNIQUE_ID: ${{ needs.image-ok.outputs.unique-id }}
+        run: |
+          for output in IMAGE_DIGEST IMAGE_REF IMAGE_REF_STRIPPED IMAGE_TAGS IMAGE_TAGS_STRIPPED; do
+            if [[ -n "${!output}" ]]; then
+              echo "::error::Expected $output to be empty when no image was pushed"
+              exit 1
+            fi
+          done
+          if [[ -z "$UNIQUE_ID" ]]; then
+            echo "::error::Expected UNIQUE_ID to be populated even when no image was pushed"
+            exit 1
+          fi

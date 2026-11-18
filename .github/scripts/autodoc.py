@@ -3,7 +3,9 @@ Parses a GitHub Actions reusable workflow file and creates usage notes in
 Markdown format. Replaces the all content between `<!-- autodoc start -->` and
 `<!-- autodoc end -->` within the `doc_file` with the generated documentation.
 
-1. Install dependencies with `python -m pip install pyyaml`
+1. Install dependencies with `python -m pip install pyyaml`. The input is
+   parsed with the safe loader because the workflow file may come from an
+   untrusted pull request.
 2. Run tests with `python -m doctest`
 3. Get help with `python autodoc -h`
 
@@ -81,7 +83,7 @@ def create_documentation(workflow_def):
     ...       foo:
     ...         description: some description
     ...         value: ${{ jobs.a.outputs.something }}
-    ... ''', Loader=yaml.CLoader)
+    ... ''', Loader=yaml.CSafeLoader)
     >>> res = create_documentation(src).split('\\n\\n') # must split these to make doctest work
     >>> print(res[0])
     ### Inputs
@@ -165,7 +167,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    workflow = yaml.load(args.workflow_file, Loader=yaml.CLoader)
+    workflow = yaml.load(args.workflow_file, Loader=yaml.CSafeLoader)
 
     readme = args.doc_file.read()
     docstring = create_documentation(workflow)

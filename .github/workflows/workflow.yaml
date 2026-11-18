@@ -4,7 +4,7 @@ on:
       cache:
         type: boolean
         default: true
-        description: Whether to enable image layer cache.
+        description: Whether to read the registry layer cache and allow default-branch runs outside pull request events to write it.
       cache-tag:
         type: string
         default: buildcache
@@ -28,7 +28,7 @@ on:
       push:
         type: boolean
         default: true
-        description: Push a successfully built image to a registry.
+        description: Push the built image to a registry after scanning. Ignored on pull request events.
       name:
         type: string
         description: Image name (repository path) within a registry.
@@ -48,7 +48,7 @@ on:
       tag-pr:
         type: boolean
         default: true
-        description: Tag a successfully built image with reference to a Pull Request, e.g. pr-2.
+        description: Generate a PR tag such as `pr-2` in image metadata. PR runs do not publish these tags.
       tag-latest:
         type: boolean
         default: false
@@ -72,7 +72,7 @@ on:
       trivy-error-is-success:
         type: boolean
         default: false
-        description: Do not produce an error if the Trivy scan fails. Primarily used for testing.
+        description: Test mode that expects vulnerability findings and allows the workflow to continue when they are found. Does not ignore scanner errors.
       trivy-ignore-unfixed:
         type: boolean
         default: true
@@ -118,27 +118,34 @@ on:
         description: SSH key to load in the SSH agent
         required: false
       npm-token:
-        description: NPM authentication token for private packages
+        description: NPM authentication token for private packages. Exposed to the build only as BuildKit secrets `npmrc` and `npm_token`, never as a build-arg.
         required: false
     outputs:
       image-digest:
-        description: The image digest for this build.
+        description: The published image digest. Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-digest }}
       image-ref:
-        description: An image reference for this build (`<name>:<git-sha>@<digest>`).
+        description: The published image reference (`<registry-url>/<name>:<git-sha>@<digest>`). Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-ref }}
       image-ref-stripped:
-        description: An image reference for this build, stripped of its registry URL (`<name>:<git-sha>@<digest>`).
+        description: The published image reference without the registry URL (`<name>:<git-sha>@<digest>`). Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-ref-stripped }}
       image-tags:
-        description: Comma-separated list of generated image tags for this build, (`<registry-url>/<name1>:<tag1>,<registry-url>/<name1>:<tag2>`).
+        description: Comma-separated list of pushed image tags (`<registry-url>/<name>:<tag1>,<registry-url>/<name>:<tag2>`). Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-tags }}
       image-tags-stripped:
-        description: Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (`<name1>:<tag1>,<name1>:<tag2>`).
+        description: Comma-separated list of pushed image tags without the registry URL (`<name>:<tag1>,<name>:<tag2>`). Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-tags-stripped }}
       unique-id:
         description: A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
         value: ${{ jobs.build.outputs.unique-id }}
+
+# No top-level `permissions:` on purpose. A called workflow can only keep or
+# reduce the caller's GITHUB_TOKEN permissions, and requesting a permission the
+# caller does not grant (e.g. `contents: read` for a caller with only
+# `packages: write`) stops the run from starting. This workflow does not need
+# its own token: checkout, registry and npm access use the secrets passed by
+# the caller. Callers should set `permissions: contents: read` on the calling job.
 
 jobs:
   build:
@@ -153,21 +160,39 @@ jobs:
         # At least on self-hosted runners, we seem to share the workspace directory
         # leading to race conditions if multiple instances of this workflow are
         # running in parallel within the same run.
+        #
+        # All caller-controlled values and secrets reach scripts through `env:`,
+        # never by interpolating `${{ }}` into the script text.
         name: Set environment
         id: setup
+        env:
+          GIT_SHA: ${{ github.sha }}
+          REGISTRY_USERNAME: ${{ secrets.registry-username }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          echo "unique-id=$(date +%Y-%m-%d)-${{ github.sha }}-$(openssl rand -hex 20)" >> $GITHUB_OUTPUT
-          if [[ "${{ secrets.registry-username }}" != "" ]]
+          echo "unique-id=$(date +%Y-%m-%d)-${GIT_SHA}-$(openssl rand -hex 20)" >> "$GITHUB_OUTPUT"
+          # Pull requests build (and scan) to test compatibility, but must never
+          # publish anything, whatever the caller passed in `push`. The event is
+          # the caller's, so this cannot be overridden by an input.
+          if [[ "${EVENT_NAME}" == "pull_request" || "${EVENT_NAME}" == "pull_request_target" ]]
           then
-            echo "docker_login=yes" >> $GITHUB_OUTPUT
+            echo "is-pr=yes" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pull request event: the image is built but never pushed or submitted."
+          fi
+          if [[ "${REGISTRY_USERNAME}" != "" ]]
+          then
+            echo "docker_login=yes" >> "$GITHUB_OUTPUT"
           fi
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.git-ref }}
           token: ${{ secrets.token }}
           submodules: ${{ inputs.git-submodules }}
           ssh-key: ${{ secrets.git-ssh-key }}
+          # Keep the token and SSH key out of .git/config, which would otherwise
+          # be part of the build context.
+          persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.4.1
       - if: steps.setup.outputs.docker_login == 'yes'
@@ -182,37 +207,7 @@ jobs:
         uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.ssh-deploy-key }}
-      - name: Setup NPM secrets and build args
-        id: npm-setup
-        run: |
-          # Check if NPM token is provided
-          if [[ "${{ secrets.npm-token }}" != "" ]]; then
-            # Combine user-provided secrets with NPM token secret
-            if [[ "${{ inputs.secrets }}" != "" ]]; then
-              echo "combined-secrets<<EOF" >> $GITHUB_OUTPUT
-              echo "${{ inputs.secrets }}" >> $GITHUB_OUTPUT
-              echo "npmrc=//registry.npmjs.org/:_authToken=${{ secrets.npm-token }}" >> $GITHUB_OUTPUT
-              echo "EOF" >> $GITHUB_OUTPUT
-            else
-              echo "combined-secrets=npmrc=//registry.npmjs.org/:_authToken=${{ secrets.npm-token }}" >> $GITHUB_OUTPUT
-            fi
-
-            # Combine user-provided build args with NPM token
-            if [[ "${{ inputs.build-args }}" != "" ]]; then
-              echo "combined-build-args<<EOF" >> $GITHUB_OUTPUT
-              echo "${{ inputs.build-args }}" >> $GITHUB_OUTPUT
-              echo "NPM_TOKEN=${{ secrets.npm-token }}" >> $GITHUB_OUTPUT
-              echo "EOF" >> $GITHUB_OUTPUT
-            else
-              echo "combined-build-args=NPM_TOKEN=${{ secrets.npm-token }}" >> $GITHUB_OUTPUT
-            fi
-          else
-            # No NPM token, just pass through the original inputs
-            echo "combined-secrets=${{ inputs.secrets }}" >> $GITHUB_OUTPUT
-            echo "combined-build-args=${{ inputs.build-args }}" >> $GITHUB_OUTPUT
-          fi
-      - if: inputs.cache == false && !inputs.ssh-agent
-        name: Build (no cache)
+      - name: Build
         uses: docker/build-push-action@v7.4.0
         with:
           file: ${{ inputs.context }}/${{ inputs.dockerfile }}
@@ -220,154 +215,145 @@ jobs:
           push: false
           pull: true
           tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          build-args: ${{ steps.npm-setup.outputs.combined-build-args }}
-          secrets: ${{ steps.npm-setup.outputs.combined-secrets }}
+          build-args: ${{ inputs.build-args }}
+          # The npm token is exposed to RUN steps only as BuildKit secrets, never
+          # as a build-arg (build-args are recorded in image history):
+          #   npmrc     - a ready-made .npmrc line for registry.npmjs.org
+          #   npm_token - the bare token
+          # Empty lines are ignored by the action.
+          secrets: |
+            ${{ inputs.secrets }}
+            ${{ secrets.npm-token && format('npmrc=//registry.npmjs.org/:_authToken={0}', secrets.npm-token) || '' }}
+            ${{ secrets.npm-token && format('npm_token={0}', secrets.npm-token) || '' }}
           outputs: type=docker
-      - if: inputs.cache == true && !inputs.ssh-agent
-        name: Build (with cache)
-        uses: docker/build-push-action@v7.4.0
-        with:
-          file: ${{ inputs.context }}/${{ inputs.dockerfile }}
-          context: ${{ inputs.context }}
-          push: false
-          pull: true
-          tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          build-args: ${{ steps.npm-setup.outputs.combined-build-args }}
-          secrets: ${{ steps.npm-setup.outputs.combined-secrets }}
-          outputs: type=docker
-          cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
-          cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
-      - if: inputs.cache == false && inputs.ssh-agent
-        name: Build (no cache)
-        uses: docker/build-push-action@v7.4.0
-        with:
-          file: ${{ inputs.context }}/${{ inputs.dockerfile }}
-          context: ${{ inputs.context }}
-          push: false
-          pull: true
-          tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          build-args: ${{ steps.npm-setup.outputs.combined-build-args }}
-          secrets: ${{ steps.npm-setup.outputs.combined-secrets }}
-          outputs: type=docker
-          ssh: |
-            default=${{ env.SSH_AUTH_SOCK }}
-      - if: inputs.cache == true && inputs.ssh-agent
-        name: Build (with cache)
-        uses: docker/build-push-action@v7.4.0
-        with:
-          file: ${{ inputs.context }}/${{ inputs.dockerfile }}
-          context: ${{ inputs.context }}
-          push: false
-          pull: true
-          tags: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-          build-args: ${{ steps.npm-setup.outputs.combined-build-args }}
-          secrets: ${{ steps.npm-setup.outputs.combined-secrets }}
-          outputs: type=docker
-          cache-from: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }}
-          cache-to: type=registry,ref=${{ inputs.registry-url }}/${{ inputs.name }}:${{ inputs.cache-tag }},mode=max,ignore-error=true
-          ssh: |
-            default=${{ env.SSH_AUTH_SOCK }}
+          cache-from: ${{ inputs.cache && format('type=registry,ref={0}/{1}:{2}', inputs.registry-url, inputs.name, inputs.cache-tag) || '' }}
+          # Only the default branch may write the shared layer cache, so that
+          # branch and PR builds cannot seed layers that later releases reuse.
+          # Scheduled runs always execute on the default branch, and their event
+          # payload has no `repository.default_branch`. `pull_request_target`
+          # runs with the base branch as `github.ref`, so it is excluded by event.
+          cache-to: ${{ inputs.cache && steps.setup.outputs.is-pr != 'yes' && (github.event_name == 'schedule' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && format('type=registry,ref={0}/{1}:{2},mode=max,ignore-error=true', inputs.registry-url, inputs.name, inputs.cache-tag) || '' }}
+          ssh: ${{ inputs.ssh-agent && format('default={0}', env.SSH_AUTH_SOCK) || '' }}
 
       #
       # Vulnerability scan
       #
+      # The action version tag is resolved to a commit in actions.lock.
+      # `version:` separately selects the Trivy binary. Keep the compromised
+      # v0.69.4–v0.69.6 releases excluded (GHSA-69fq-xp46-6x23).
+      #
 
-      # - name: Configure Python
-      #   uses: actions/setup-python@v6
-      #   with:
-      #     python-version: "3.11"
-      # - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
-      #   name: Scan for vulnerabilities (table format)
-      #   uses: aquasecurity/trivy-action@0.35.0
-      #   with:
-      #     exit-code: "0"
-      #     hide-progress: false
-      #     ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
-      #     image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-      #     output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt
-      #     scanners: vuln,config
-      #     severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
-      #     trivyignores: ${{ inputs.trivy-ignore-files }}
-      #     vuln-type: os,library
-      #   env:
-      #     TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
-      #     TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
-      # - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
-      #   name: Post all scan results to Github Summary as a table
-      #   env:
-      #     CODE_BLOCK: "```"
-      #   run: |
-      #     echo "# Trivy scan results" >> $GITHUB_STEP_SUMMARY
+      - if: inputs.trivy-enabled
+        name: Configure Python
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.14"
+      - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
+        name: Scan for vulnerabilities (table format)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: v0.70.0
+          exit-code: "0"
+          hide-progress: false
+          ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
+          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt
+          scanners: vuln,config
+          severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+          trivyignores: ${{ inputs.trivy-ignore-files }}
+          vuln-type: os,library
+        env:
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
+      - if: inputs.trivy-enabled && inputs.trivy-summary-enabled
+        name: Post all scan results to Github Summary as a table
+        env:
+          CODE_BLOCK: "```"
+          RESULT_FILENAME: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt
+        run: |
+          echo "# Trivy scan results" >> "$GITHUB_STEP_SUMMARY"
 
-      #     echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
-      #     cat ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.txt >> $GITHUB_STEP_SUMMARY
-      #     echo $CODE_BLOCK >> $GITHUB_STEP_SUMMARY
-      # - if: inputs.trivy-sbom-enabled
-      #   name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
-      #   uses: aquasecurity/trivy-action@0.35.0
-      #   with:
-      #     format: github
-      #     hide-progress: false
-      #     output: "dependency-results.sbom.json"
-      #     image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-      #     github-pat: ${{ secrets.GITHUB_TOKEN }}
-      #   env:
-      #     TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
-      #     TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
-      # - if: inputs.trivy-enabled
-      #   name: Scan for vulnerabilities
-      #   uses: aquasecurity/trivy-action@0.35.0
-      #   with:
-      #     exit-code: "0"
-      #     format: json
-      #     hide-progress: false
-      #     ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
-      #     image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
-      #     output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
-      #     scanners: vuln,config
-      #     severity: ${{ inputs.trivy-severity }}
-      #     trivyignores: ${{ inputs.trivy-ignore-files }}
-      #     vuln-type: os,library
-      #   env:
-      #     TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
-      #     TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
-      # - if: inputs.trivy-enabled
-      #   name: Parse vulnerability scan results
-      #   continue-on-error: ${{ inputs.trivy-error-is-success }}
-      #   shell: python
-      #   env:
-      #     RESULT_FILENAME: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
-      #   id: parse
-      #   run: |
-      #     import json
-      #     import os
-      #     import sys
+          echo "$CODE_BLOCK" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RESULT_FILENAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "$CODE_BLOCK" >> "$GITHUB_STEP_SUMMARY"
+      - if: inputs.trivy-enabled && inputs.trivy-sbom-enabled && steps.setup.outputs.is-pr != 'yes'
+        name: Run Trivy in GitHub SBOM mode and submit results to Dependency Graph
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: v0.70.0
+          format: github
+          hide-progress: false
+          output: "dependency-results.sbom.json"
+          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          # The caller's `token` secret is used so that this reusable workflow
+          # needs no write permission of its own. Dependency submission needs a
+          # token that can write to the caller's repository.
+          github-pat: ${{ secrets.token }}
+        env:
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
+      - if: inputs.trivy-enabled
+        name: Scan for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: v0.70.0
+          exit-code: "0"
+          format: json
+          hide-progress: false
+          ignore-unfixed: ${{ inputs.trivy-ignore-unfixed }}
+          image-ref: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          output: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
+          scanners: vuln,config
+          severity: ${{ inputs.trivy-severity }}
+          trivyignores: ${{ inputs.trivy-ignore-files }}
+          vuln-type: os,library
+        env:
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db
+      - if: inputs.trivy-enabled
+        name: Parse vulnerability scan results
+        continue-on-error: ${{ inputs.trivy-error-is-success }}
+        shell: python
+        env:
+          RESULT_FILENAME: ${{ steps.setup.outputs.unique-id }}-trivy-scan-result.json
+        id: parse
+        run: |
+          import json
+          import os
+          import sys
 
-      #     with open(os.getenv("RESULT_FILENAME"), "r") as f:
-      #         data = json.load(f)
+          def escape(s):
+              # Scan results contain third-party text; stop it from forging
+              # workflow commands.
+              return str(s).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
-      #     exit_code = 0
-      #     for result in data.get("Results", []):
-      #         for vuln in result.get("Vulnerabilities", []):
-      #             # Severity to report to GitHub
-      #             sev = "error" if vuln.get("Severity") in ("HIGH", "CRITICAL") else "warning"
-      #             msg = f"{vuln.get('Severity')} {vuln.get('VulnerabilityID')} {vuln.get('PkgName')}: {vuln.get('Title')} ({vuln.get('PrimaryURL')})"
-      #             print(f"::{sev} ::{msg}")
+          with open(os.environ["RESULT_FILENAME"], "r") as f:
+              data = json.load(f)
 
-      #             # Since severity filter is set at job level, we can exit non-zero for all
-      #             # issues regardless of severity and let workflow consumers decide which
-      #             # severity levels to care about.
-      #             exit_code = 2
+          exit_code = 0
+          for result in data.get("Results") or []:
+              for vuln in result.get("Vulnerabilities") or []:
+                  # Severity to report to GitHub
+                  sev = "error" if vuln.get("Severity") in ("HIGH", "CRITICAL") else "warning"
+                  msg = f"{vuln.get('Severity')} {vuln.get('VulnerabilityID')} {vuln.get('PkgName')}: {vuln.get('Title')} ({vuln.get('PrimaryURL')})"
+                  print(f"::{sev}::{escape(msg)}")
 
-      #     with open(os.getenv("GITHUB_OUTPUT"), 'a') as f:
-      #       print(f"exit-code={exit_code}", file=f)
-      #     print("Raw results:")
-      #     json.dump(data, sys.stdout)
-      #     sys.exit(exit_code)
-      # - if: inputs.trivy-enabled && inputs.trivy-error-is-success
-      #   name: Test results
-      #   run: |
-      #     test "x${{ steps.parse.outputs.exit-code }}" = "x2"
+                  # Since severity filter is set at job level, we can exit non-zero for all
+                  # issues regardless of severity and let workflow consumers decide which
+                  # severity levels to care about.
+                  exit_code = 2
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              print(f"exit-code={exit_code}", file=f)
+          print("Raw results:")
+          json.dump(data, sys.stdout)
+          sys.exit(exit_code)
+      - if: inputs.trivy-enabled && inputs.trivy-error-is-success
+        name: Test results
+        env:
+          EXIT_CODE: ${{ steps.parse.outputs.exit-code }}
+        run: |
+          test "${EXIT_CODE}" = "2"
 
       #
       # Push
@@ -376,11 +362,14 @@ jobs:
       - name: Build list of additional tags
         id: additional-tags
         uses: actions/github-script@v9.0.0
+        env:
+          # Passed through the environment so that the value is data, never code.
+          TAG_EXTRA: ${{ inputs.tag-extra }}
         with:
           script: |
-            core.setOutput('tags', `${{ inputs.tag-extra }}`.split(",").join("\n"))
+            core.setOutput('tags', (process.env.TAG_EXTRA || '').split(",").join("\n"))
       - name: Generate image tags
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@v6.2.0
         id: meta
         with:
           images: |
@@ -391,51 +380,54 @@ jobs:
             type=raw,value=${{ github.sha }},enable=${{ inputs.tag-sha }}
             type=raw,value=latest,enable=${{ inputs.tag-latest }}
             ${{ steps.additional-tags.outputs.tags }}
-      - if: inputs.push && steps.setup.outputs.docker_login == 'yes'
+      - if: inputs.push && steps.setup.outputs.is-pr != 'yes' && steps.setup.outputs.docker_login == 'yes'
         name: Push tags
         id: push
+        env:
+          IMAGE: ${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}
+          TAGS: ${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}
+          REGISTRY_URL: ${{ inputs.registry-url }}
+          IMAGE_NAME: ${{ inputs.name }}
+          GIT_SHA: ${{ github.sha }}
         run: |
-          echo "### Tags" >> $GITHUB_STEP_SUMMARY
-
-          export IMAGE='${{ inputs.name }}:${{ steps.setup.outputs.unique-id }}'
-          export TAGS='${{ join(fromJSON(steps.meta.outputs.json).tags, ' ') }}'
+          echo "### Tags" >> "$GITHUB_STEP_SUMMARY"
 
           digest=""
           tags=""
           tags_stripped=""
           for tag in $TAGS
           do
-            docker tag "$IMAGE" $tag
+            docker tag "$IMAGE" "$tag"
 
             # Capture the image digest. Doesn't matter that it gets overwritten
             # every iteration, as they are all the same.
-            digest=$(docker push $tag | tee | grep -oP 'digest: \K(sha256:[0-9a-f]*)')
+            digest=$(docker push "$tag" | tee | grep -oP 'digest: \K(sha256:[0-9a-f]*)')
 
             # Collect all tags, both stripped of the registry URL and not.
             tags+="${tag},"
-            stripped=${tag#"${{ inputs.registry-url }}/"}
+            stripped=${tag#"${REGISTRY_URL}/"}
             tags_stripped+="${stripped},"
 
             # Add tag to summary output
-            echo "- \`${tag}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
           done
-          echo >> $GITHUB_STEP_SUMMARY
+          echo >> "$GITHUB_STEP_SUMMARY"
 
           # Remove trailing comma before setting as output var
-          echo "image-tags=$(echo "$tags" | sed 's|,*$||')" >> $GITHUB_OUTPUT
-          echo "image-tags-stripped=$(echo "$tags_stripped" | sed 's|,*$||')" >> $GITHUB_OUTPUT
-          echo "image-digest=${digest}" >> $GITHUB_OUTPUT
+          echo "image-tags=$(echo "$tags" | sed 's|,*$||')" >> "$GITHUB_OUTPUT"
+          echo "image-tags-stripped=$(echo "$tags_stripped" | sed 's|,*$||')" >> "$GITHUB_OUTPUT"
+          echo "image-digest=${digest}" >> "$GITHUB_OUTPUT"
 
-          echo "### Digest" >> $GITHUB_STEP_SUMMARY
-          echo "- \`$digest\`" >> $GITHUB_STEP_SUMMARY
-          echo >> $GITHUB_STEP_SUMMARY
+          echo "### Digest" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
 
-          echo "### Image reference" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${digest}\`" >> $GITHUB_STEP_SUMMARY
+          echo "### Image reference" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`${REGISTRY_URL}/${IMAGE_NAME}:${GIT_SHA}@${digest}\`" >> "$GITHUB_STEP_SUMMARY"
     outputs:
       image-digest: ${{ steps.push.outputs.image-digest }}
-      image-ref: ${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
-      image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
+      image-ref: ${{ steps.push.outputs.image-digest && format('{0}/{1}:{2}@{3}', inputs.registry-url, inputs.name, github.sha, steps.push.outputs.image-digest) || '' }}
+      image-ref-stripped: ${{ steps.push.outputs.image-digest && format('{0}:{1}@{2}', inputs.name, github.sha, steps.push.outputs.image-digest) || '' }}
       image-tags: ${{ steps.push.outputs.image-tags }}
       image-tags-stripped: ${{ steps.push.outputs.image-tags-stripped }}
       unique-id: ${{ steps.setup.outputs.unique-id }}
