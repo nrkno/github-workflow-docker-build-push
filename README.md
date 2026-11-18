@@ -168,17 +168,6 @@ enough. SBOMs are not submitted for pull requests.
 Pin by SHA, or use the floating tags `v5` and `v5.<minor>`, which are moved on
 each release. `v4` stays on the last v4 release and receives no further updates.
 
-### Preparing the v5 release notes
-
-Use the migration steps above when reviewing the generated v5 release notes.
-The original breaking-change commit predates the final migration guidance.
-Remove the suggestion to use the test-only scan mode as a migration workaround.
-Include the checkout credential change, the explicit `token` with
-`contents: write` for SBOM submission, and the default-branch-only registry
-cache writes. PRs still build and can scan, but they do not push images, write
-registry cache, or submit an SBOM. Build-only runs leave all five publication
-outputs empty, not just the digest and tags.
-
 ## Implementation notes
 
 The *build*, *scan* and *push* phases have been merged into one job to

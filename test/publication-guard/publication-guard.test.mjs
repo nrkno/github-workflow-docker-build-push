@@ -35,12 +35,12 @@ function wouldRun(step, context) {
   return evaluate(`!(${condition})`, context).coerceString() === 'false';
 }
 
-function setupOutputs(github) {
+function setupOutputs(github, registryUsername) {
   const directory = mkdtempSync(join(tmpdir(), 'publication-guard-'));
   try {
     const output = join(directory, 'output');
     // A nonempty marker exercises the login prerequisite without credentials.
-    const setupContext = { github, secrets: { 'registry-username': 'synthetic-user' } };
+    const setupContext = { github, secrets: { 'registry-username': registryUsername } };
     const setupEnv = Object.fromEntries(
       Object.entries(setup.env).map(([key, source]) => [key, value(source, setupContext)]),
     );
@@ -57,19 +57,22 @@ const defaultRef = 'refs/heads/main';
 const blocked = { push: false, cache: false, sbom: false };
 const allowed = { push: true, cache: true, sbom: true };
 
-for (const [name, event, ref, overrides, expected] of [
+for (const [name, event, ref, overrides, expected, registryUsername = 'synthetic-user'] of [
   ['PR with publication requested', 'pull_request', 'refs/pull/42/merge', {}, blocked],
   ['PR target with default-branch ref and publication requested', 'pull_request_target', defaultRef, {}, blocked],
   ['default-branch build only', 'push', defaultRef, { push: false, cache: false, 'trivy-sbom-enabled': false }, blocked],
   ['push disabled with cache write and SBOM requested', 'push', defaultRef, { push: false }, { ...allowed, push: false }],
   ['default-branch publication eligible', 'push', defaultRef, {}, allowed],
+  ['feature branch cannot write the registry cache', 'push', 'refs/heads/feature/example', {}, { ...allowed, cache: false }],
+  ['scheduled run can write cache without default-branch metadata', 'schedule', defaultRef, {}, allowed],
+  ['no registry login decision blocks image push', 'push', defaultRef, {}, { ...allowed, push: false }, ''],
 ]) {
   test(name, () => {
     const github = {
       event_name: event,
       ref,
       sha: 'a'.repeat(40),
-      event: { repository: { default_branch: 'main' } },
+      event: event === 'schedule' ? {} : { repository: { default_branch: 'main' } },
     };
     const inputs = {
       push: true,
@@ -81,7 +84,7 @@ for (const [name, event, ref, overrides, expected] of [
       'trivy-sbom-enabled': true,
       ...overrides,
     };
-    const context = { github, inputs, steps: { setup: { outputs: setupOutputs(github) } } };
+    const context = { github, inputs, steps: { setup: { outputs: setupOutputs(github, registryUsername) } } };
 
     // Only the setup script ran. Never invoke login, Docker, or SBOM submission,
     // even if an assertion finds that the workflow would allow an operation.
