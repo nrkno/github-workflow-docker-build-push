@@ -11,17 +11,18 @@ on:
 permissions:
   contents: read
 
-# These jobs never push: `push: false`, no registry credentials, and the reusable
-# workflow additionally refuses to push on pull_request events.
+# These tests use no registry credentials or registry cache. Only the PR test
+# asks for a push, which the reusable workflow must refuse.
 jobs:
   image-ok:
     uses: ./.github/workflows/workflow.yaml
     with:
       runs-on: "['ubuntu-24.04']"
-      registry-url: cr.example.com
+      registry-url: registry.example.invalid
       name: test
       context: ./test/image-ok
-      push: false
+      cache: false
+      push: ${{ github.event_name == 'pull_request' }}
     secrets:
       registry-username: ""
       registry-password: ""
@@ -31,9 +32,10 @@ jobs:
     uses: ./.github/workflows/workflow.yaml
     with:
       runs-on: "['ubuntu-24.04']"
-      registry-url: cr.example.com
+      registry-url: registry.example.invalid
       name: test
       context: ./test/image-vulnerable
+      cache: false
       push: false
       trivy-error-is-success: true
     secrets:
@@ -45,12 +47,40 @@ jobs:
     uses: ./.github/workflows/workflow.yaml
     with:
       runs-on: "['ubuntu-24.04']"
-      registry-url: cr.example.com
+      registry-url: registry.example.invalid
       name: test
       context: ./test/image-ok
+      cache: false
       push: false
       tag-extra: foo,bar,baz
     secrets:
       registry-username: ""
       registry-password: ""
       token: ${{ secrets.GITHUB_TOKEN }}
+
+  no-publication-outputs:
+    name: Check outputs when no image was pushed
+    needs: image-ok
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Check reusable workflow outputs
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ needs.image-ok.outputs.image-digest }}
+          IMAGE_REF: ${{ needs.image-ok.outputs.image-ref }}
+          IMAGE_REF_STRIPPED: ${{ needs.image-ok.outputs.image-ref-stripped }}
+          IMAGE_TAGS: ${{ needs.image-ok.outputs.image-tags }}
+          IMAGE_TAGS_STRIPPED: ${{ needs.image-ok.outputs.image-tags-stripped }}
+          UNIQUE_ID: ${{ needs.image-ok.outputs.unique-id }}
+        run: |
+          for output in IMAGE_DIGEST IMAGE_REF IMAGE_REF_STRIPPED IMAGE_TAGS IMAGE_TAGS_STRIPPED; do
+            if [[ -n "${!output}" ]]; then
+              echo "::error::Expected $output to be empty when no image was pushed"
+              exit 1
+            fi
+          done
+          if [[ -z "$UNIQUE_ID" ]]; then
+            echo "::error::Expected UNIQUE_ID to be populated even when no image was pushed"
+            exit 1
+          fi

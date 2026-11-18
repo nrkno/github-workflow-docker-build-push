@@ -6,15 +6,22 @@ a container registry.
 ## Usage
 
 Set `permissions: contents: read` on the calling job. The workflow declares no
-permissions of its own, so it runs with the caller's `GITHUB_TOKEN`. A token
-passed as the `token` or `registry-password` secret keeps the caller's
-permissions (for example `packages: write` when pushing to ghcr.io).
+permissions of its own, so it inherits the caller's `GITHUB_TOKEN` permissions.
+Grant more only when needed. For example, a caller that uses `GITHUB_TOKEN` as
+`registry-password` to push to ghcr.io also needs `packages: write`.
 
 Pull requests never publish. On `pull_request` and `pull_request_target` events
 the image is built (to test that it builds) and may be scanned, but it is never
 pushed to a registry, no layer cache is written, and no SBOM is submitted,
-whatever the `push` input says. The `image-digest` and `image-tags` outputs are
-empty for these events.
+whatever the `push` input says. Use `pull_request` on a GitHub-hosted or
+isolated ephemeral runner to build untrusted PR code, and do not pass privileged
+secrets to it. The publication guard does not prevent the build from using
+credentials that the caller explicitly supplies.
+
+When no image is pushed, all five publication outputs are empty: `image-digest`,
+both `image-ref` forms, and both `image-tags` forms. Use `image-digest` to
+check whether there is a published image before consuming a reference. `unique-id`
+is still available on successful build-only runs.
 
 Pin the workflow by full commit SHA (replace `<sha>` and the version comment
 with the latest release). Version tags are mutable.
@@ -23,6 +30,8 @@ with the latest release). Version tags are mutable.
 jobs:
   build-push:
     uses: nrkno/github-workflow-docker-build-push/.github/workflows/workflow.yaml@<sha> # v5.x.y
+    permissions:
+      contents: read
     with:
       runs-on: "['self-hosted', 'linux']"
       registry-url: myregistry.azurecr.io
@@ -39,24 +48,24 @@ jobs:
 
 <!-- autodoc start -->
 ### Inputs
-- `cache` (boolean, default `true`) - Whether to enable image layer cache.
+- `cache` (boolean, default `true`) - Whether to read the registry layer cache and allow default-branch runs outside pull request events to write it.
 - `cache-tag` (string, default `"buildcache"`) - Image tag to use for image layer cache.
 - `context` (string, default `"."`) - The root directory for the Docker build context.
 - `dockerfile` (string, default `"Dockerfile"`) - Path to a Dockerfile relative to the Docker build context path.
 - `git-ref` (string, default `""`) - The branch, tag or SHA to checkout. Leave empty for the current branch ref.
 - `git-submodules` (boolean, default `false`) - Whether to also checkout Git submodules.
-- `push` (boolean, default `true`) - Push a successfully built image to a registry.
+- `push` (boolean, default `true`) - Push the built image to a registry after scanning. Ignored on pull request events.
 - `name` (string, **required**) - Image name (repository path) within a registry.
 - `ssh-agent` (boolean, default `false`) - Whether to start an SSH agent for the build.
 - `tag-branch` (boolean, default `false`) - Tag a successfully built image with the branch name.
 - `tag-sha` (boolean, default `true`) - Tag a successfully built image with the commit SHA that triggered the workflow.
-- `tag-pr` (boolean, default `true`) - Tag a successfully built image with reference to a Pull Request, e.g. pr-2.
+- `tag-pr` (boolean, default `true`) - Generate a PR tag such as `pr-2` in image metadata. PR runs do not publish these tags.
 - `tag-latest` (boolean, default `false`) - Tag a successfully built image with the tag latest.
 - `tag-extra` (string, default `""`) - Comma-separated list of additional image tags.
 - `registry-url` (string, **required**) - URL to the container registry.
 - `runs-on` (string, default `"['self-hosted']"`) - Type of runner for the jobs. For non-self-hosted runners, use ubuntu-latest for example.
 - `trivy-enabled` (boolean, default `true`) - Scan the built image for known vulnerabilities using Trivy.
-- `trivy-error-is-success` (boolean, default `false`) - Do not produce an error if the Trivy scan fails. Primarily used for testing.
+- `trivy-error-is-success` (boolean, default `false`) - Test mode that expects vulnerability findings and allows the workflow to continue when they are found. Does not ignore scanner errors.
 - `trivy-ignore-unfixed` (boolean, default `true`) - Ignore errors that do not have a known fix.
 - `trivy-ignore-files` (string, default `""`) - Comma-separated list of paths to Trivy ignore files, relative to the repository root.
 - `trivy-severity` (string, default `"MEDIUM,HIGH,CRITICAL"`) - Comma-separated list of severities to consider an error.
@@ -74,11 +83,11 @@ jobs:
 - `npm-token` - NPM authentication token for private packages. Exposed to the build only as BuildKit secrets `npmrc` and `npm_token`, never as a build-arg.
 
 ### Outputs
-- `image-digest` - The image digest for this build.
-- `image-ref` - An image reference for this build (`<name>:<git-sha>@<digest>`).
-- `image-ref-stripped` - An image reference for this build, stripped of its registry URL (`<name>:<git-sha>@<digest>`).
-- `image-tags` - Comma-separated list of generated image tags for this build, (`<registry-url>/<name1>:<tag1>,<registry-url>/<name1>:<tag2>`).
-- `image-tags-stripped` - Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (`<name1>:<tag1>,<name1>:<tag2>`).
+- `image-digest` - The published image digest. Empty if no image was pushed.
+- `image-ref` - The published image reference (`<registry-url>/<name>:<git-sha>@<digest>`). Empty if no image was pushed.
+- `image-ref-stripped` - The published image reference without the registry URL (`<name>:<git-sha>@<digest>`). Empty if no image was pushed.
+- `image-tags` - Comma-separated list of pushed image tags (`<registry-url>/<name>:<tag1>,<registry-url>/<name>:<tag2>`). Empty if no image was pushed.
+- `image-tags-stripped` - Comma-separated list of pushed image tags without the registry URL (`<name>:<tag1>,<name>:<tag2>`). Empty if no image was pushed.
 - `unique-id` - A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
 <!-- autodoc end -->
 
@@ -113,10 +122,11 @@ GitHub. Do not put real secret values there; prefer the `npm-token` secret.
 ## Vulnerability scanning
 
 When `trivy-enabled` is `true` (the default), the built image is scanned with
-`aquasecurity/trivy-action`, pinned by commit SHA to the immutable `v0.36.0`
-release, with Trivy `v0.70.0`. Findings fail the job, so
-nothing is pushed, unless `trivy-error-is-success` is set. The layer cache is written only from the
-repository's default branch.
+`aquasecurity/trivy-action@v0.36.0`, whose commit is recorded in `actions.lock`.
+The workflow selects Trivy `v0.70.0` separately. Vulnerabilities reported at the
+configured severities fail the job before image tags are pushed. Set
+`trivy-error-is-success: true` only in tests that expect findings: the test fails
+if there are no findings or the scanner itself fails.
 
 When `trivy-sbom-enabled` is `true`, the SBOM is submitted to the Dependency
 Graph with the `token` secret. A caller that passes `secrets.GITHUB_TOKEN` as
@@ -124,8 +134,6 @@ Graph with the `token` secret. A caller that passes `secrets.GITHUB_TOKEN` as
 enough. SBOMs are not submitted for pull requests.
 
 ## Migrating from v4 to v5
-
-v5 has three breaking changes.
 
 1. **The `NPM_TOKEN` build-arg is gone.** The npm token is now only available
    as BuildKit secrets (see above). In every Dockerfile that has
@@ -135,14 +143,27 @@ v5 has three breaking changes.
       `RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci`
    3. Rotate npm tokens that were passed as a build-arg: they may be readable
       in the history of images already published.
-2. **Scan findings now block the push.** v4.6 skipped scanning without saying
-   so. Images with fixable MEDIUM, HIGH or CRITICAL findings now fail the job
-   before anything is pushed. Fix the findings, add a Trivy ignore file
-   (`trivy-ignore-files`), narrow `trivy-severity`, or set `trivy-enabled: false`
-   or `trivy-error-is-success: true` knowingly.
+2. **Scan findings now block the image push.** v4.6 skipped scanning without
+   saying so. By default, fixable MEDIUM, HIGH or CRITICAL findings fail the
+   job before image tags are pushed. Fix the findings, add a Trivy ignore file
+   (`trivy-ignore-files`), or narrow `trivy-severity`. Setting
+   `trivy-enabled: false` disables this gate.
 3. **Pull requests never push.** Callers that relied on `pr-<n>` images being
-   pushed from `pull_request` events must build and push from a branch or
-   `push` event instead.
+   pushed from `pull_request` events must build and push from a trusted
+   non-PR run instead, such as a `push` to a protected branch. Skip
+   downstream jobs that need a published reference when `image-digest` is empty.
+4. **Checkout no longer saves Git credentials.** The `token` and optional
+   `git-ssh-key` still authenticate the initial checkout, including submodules
+   when enabled. Later Git commands must authenticate explicitly. If a Docker
+   build needs private Git dependencies, supply a scoped BuildKit secret or SSH
+   mount; do not copy checkout credentials into the build context. For SBOM
+   submission, the passed `token` now needs `contents: write`, rather than
+   relying on the implicit `GITHUB_TOKEN`.
+5. **Only the default branch writes the registry layer cache.** With
+   `cache: true`, PRs and other branches may read the existing cache, but only
+   default-branch runs outside PR events (including scheduled runs) may write
+   it. `push: false` controls image publication only; use `cache: false` to
+   disable registry cache reads and writes.
 
 Pin by SHA, or use the floating tags `v5` and `v5.<minor>`, which are moved on
 each release. `v4` stays on the last v4 release and receives no further updates.
@@ -155,10 +176,10 @@ but the save in speed and maintenance is significant. To separate the steps
 it is necessary to cache the built image between jobs, causing a lot of time
 spent uploading and downloading artifacts.
 
-The registry URL must be passed as a secret when it's sourced from a repository
-secret. This prevents us from printing the full image refs in the workflow
-outputs and job summary. This has been worked around by outputting tags stripped
-of their registry URLs.
+Pass the registry host in the `registry-url` input and credentials in the
+`registry-username` and `registry-password` secrets. If the host itself is
+sourced from a secret, GitHub may suppress outputs containing it. The stripped
+outputs omit the host.
 
 ## References
 

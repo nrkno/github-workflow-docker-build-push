@@ -4,7 +4,7 @@ on:
       cache:
         type: boolean
         default: true
-        description: Whether to enable image layer cache.
+        description: Whether to read the registry layer cache and allow default-branch runs outside pull request events to write it.
       cache-tag:
         type: string
         default: buildcache
@@ -28,7 +28,7 @@ on:
       push:
         type: boolean
         default: true
-        description: Push a successfully built image to a registry.
+        description: Push the built image to a registry after scanning. Ignored on pull request events.
       name:
         type: string
         description: Image name (repository path) within a registry.
@@ -48,7 +48,7 @@ on:
       tag-pr:
         type: boolean
         default: true
-        description: Tag a successfully built image with reference to a Pull Request, e.g. pr-2.
+        description: Generate a PR tag such as `pr-2` in image metadata. PR runs do not publish these tags.
       tag-latest:
         type: boolean
         default: false
@@ -72,7 +72,7 @@ on:
       trivy-error-is-success:
         type: boolean
         default: false
-        description: Do not produce an error if the Trivy scan fails. Primarily used for testing.
+        description: Test mode that expects vulnerability findings and allows the workflow to continue when they are found. Does not ignore scanner errors.
       trivy-ignore-unfixed:
         type: boolean
         default: true
@@ -122,19 +122,19 @@ on:
         required: false
     outputs:
       image-digest:
-        description: The image digest for this build.
+        description: The published image digest. Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-digest }}
       image-ref:
-        description: An image reference for this build (`<name>:<git-sha>@<digest>`).
+        description: The published image reference (`<registry-url>/<name>:<git-sha>@<digest>`). Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-ref }}
       image-ref-stripped:
-        description: An image reference for this build, stripped of its registry URL (`<name>:<git-sha>@<digest>`).
+        description: The published image reference without the registry URL (`<name>:<git-sha>@<digest>`). Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-ref-stripped }}
       image-tags:
-        description: Comma-separated list of generated image tags for this build, (`<registry-url>/<name1>:<tag1>,<registry-url>/<name1>:<tag2>`).
+        description: Comma-separated list of pushed image tags (`<registry-url>/<name>:<tag1>,<registry-url>/<name>:<tag2>`). Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-tags }}
       image-tags-stripped:
-        description: Comma-separated list of generated image tags for this build, stripped of their registry URL, without a leading slash (`<name1>:<tag1>,<name1>:<tag2>`).
+        description: Comma-separated list of pushed image tags without the registry URL (`<name>:<tag1>,<name>:<tag2>`). Empty if no image was pushed.
         value: ${{ jobs.build.outputs.image-tags-stripped }}
       unique-id:
         description: A generated unique ID for this run. Can be useful when debugging runners to determine artifact filenames.
@@ -238,12 +238,9 @@ jobs:
       #
       # Vulnerability scan
       #
-      # Uses aquasecurity/trivy-action pinned by commit SHA to the immutable
-      # v0.36.0 release (published 2026-04-22, after the GHSA-69fq-xp46-6x23
-      # tag hijack of 2026-03-19/20). That release pins aquasecurity/setup-trivy
-      # to v0.2.6 by SHA and defaults to Trivy v0.70.0, which is outside the
-      # compromised Trivy releases (v0.69.4 - v0.69.6). Do not bump to a tag
-      # without re-pinning by SHA.
+      # The action version tag is resolved to a commit in actions.lock.
+      # `version:` separately selects the Trivy binary. Keep the compromised
+      # v0.69.4–v0.69.6 releases excluded (GHSA-69fq-xp46-6x23).
       #
 
       - if: inputs.trivy-enabled
@@ -429,8 +426,8 @@ jobs:
           echo "- \`${REGISTRY_URL}/${IMAGE_NAME}:${GIT_SHA}@${digest}\`" >> "$GITHUB_STEP_SUMMARY"
     outputs:
       image-digest: ${{ steps.push.outputs.image-digest }}
-      image-ref: ${{ inputs.registry-url }}/${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
-      image-ref-stripped: ${{ inputs.name }}:${{ github.sha }}@${{ steps.push.outputs.image-digest }}
+      image-ref: ${{ steps.push.outputs.image-digest && format('{0}/{1}:{2}@{3}', inputs.registry-url, inputs.name, github.sha, steps.push.outputs.image-digest) || '' }}
+      image-ref-stripped: ${{ steps.push.outputs.image-digest && format('{0}:{1}@{2}', inputs.name, github.sha, steps.push.outputs.image-digest) || '' }}
       image-tags: ${{ steps.push.outputs.image-tags }}
       image-tags-stripped: ${{ steps.push.outputs.image-tags-stripped }}
       unique-id: ${{ steps.setup.outputs.unique-id }}
