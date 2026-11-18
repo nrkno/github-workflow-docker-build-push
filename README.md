@@ -168,6 +168,17 @@ enough. SBOMs are not submitted for pull requests.
 Pin by SHA, or use the floating tags `v5` and `v5.<minor>`, which are moved on
 each release. `v4` stays on the last v4 release and receives no further updates.
 
+### Preparing the v5 release notes
+
+Use the migration steps above when reviewing the generated v5 release notes.
+The original breaking-change commit predates the final migration guidance.
+Remove the suggestion to use the test-only scan mode as a migration workaround.
+Include the checkout credential change, the explicit `token` with
+`contents: write` for SBOM submission, and the default-branch-only registry
+cache writes. PRs still build and can scan, but they do not push images, write
+registry cache, or submit an SBOM. Build-only runs leave all five publication
+outputs empty, not just the digest and tags.
+
 ## Implementation notes
 
 The *build*, *scan* and *push* phases have been merged into one job to
@@ -180,6 +191,13 @@ Pass the registry host in the `registry-url` input and credentials in the
 `registry-username` and `registry-password` secrets. If the host itself is
 sourced from a secret, GitHub may suppress outputs containing it. The stripped
 outputs omit the host.
+
+## Testing publication behavior
+
+The **Check publication decisions** job evaluates the workflow's actual guards
+using synthetic PR and non-PR inputs. It does not log in, run Docker, or submit
+an SBOM. The **Check outputs when no image was pushed** job checks the outputs
+of a real build without registry credentials; it does not prove the PR guard.
 
 ## References
 
@@ -213,5 +231,5 @@ touch `.github/workflows/` and fails if an action reference has no lockfile
 entry. This offline check does not verify where the pinned commits came from.
 An advisory step runs the read-only `gh actions-lock --verify --no-interactive`
 against the GitHub API to verify the pins. Review any findings before merging;
-the online step reports findings without failing the job. Do not edit the
+the online step warns on failure without failing the job. Do not edit the
 lockfile by hand.

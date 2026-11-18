@@ -11,9 +11,21 @@ on:
 permissions:
   contents: read
 
-# These tests use no registry credentials or registry cache. Only the PR test
-# asks for a push, which the reusable workflow must refuse.
 jobs:
+  publication-guard:
+    name: Check publication decisions
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: test/publication-guard
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+
+  # The image fixtures run without registry credentials, cache, or image push.
   image-ok:
     uses: ./.github/workflows/workflow.yaml
     with:
@@ -22,7 +34,7 @@ jobs:
       name: test
       context: ./test/image-ok
       cache: false
-      push: ${{ github.event_name == 'pull_request' }}
+      push: false
     secrets:
       registry-username: ""
       registry-password: ""
@@ -59,6 +71,7 @@ jobs:
       token: ${{ secrets.GITHUB_TOKEN }}
 
   no-publication-outputs:
+    # This caller only checks outputs. The synthetic job tests the PR guard.
     name: Check outputs when no image was pushed
     needs: image-ok
     runs-on: ubuntu-24.04
